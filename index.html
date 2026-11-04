@@ -147,11 +147,11 @@ span.via{cursor:default}
 .tlabel{transform:translate(-4px,-50%);font-size:11px;color:#2c3740;display:flex;align-items:center;gap:4px}
 .tlabel i{width:5px;height:5px;border-radius:50%;background:#55626b;flex:none}
 .lm{position:absolute;transform:translate(-14px,-14px);display:flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
-.lm-ico{width:28px;height:28px;border-radius:50%;background:#fff;border:2px solid;display:grid;place-items:center;font-size:15px;line-height:1;
+.lm-ico{width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid;display:grid;place-items:center;font-size:13px;line-height:1;cursor:pointer;
   box-shadow:0 1px 4px rgba(0,0,0,.35);flex:none}
 .lm-name{font:600 12px var(--font-body);color:#1f2a33;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff}
-.lm.dim{opacity:.55}.lm.dim .lm-ico{width:22px;height:22px;font-size:12px}
-.lm.sel .lm-ico{transform:scale(1.2);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.45)}
+.lm-ico.dim{opacity:.55;font-size:11px}
+.lm-ico.sel{transform:scale(1.2);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.45)}
 .lm-chip{padding:2px 4px 2px 4px;background:var(--panel)}
 .lm-open{display:inline-flex;align-items:center;gap:6px}
 .lm-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid;background:#fff;display:grid;place-items:center;font-size:12px;line-height:1;flex:none}
@@ -487,10 +487,15 @@ function drawMap(){
       L.polyline(pts,{color:t.color,weight:isA?3:2,opacity:op,dashArray:VIA[v].dash,lineCap:'round'}).addTo(routeLayer);
       if(isA)L.marker(pts[20],{interactive:false,keyboard:false,icon:L.divIcon({className:'',iconSize:[22,22],
         html:`<div class="via-ico" title="${VIA[v].name}">${VIA[v].ico}</div>`})}).addTo(routeLayer);}
-    (t.marks||[]).forEach(mk=>{
-      L.marker([mk.lat,mk.lng],{zIndexOffset:isA?900:-100,icon:L.divIcon({className:'',iconSize:[0,0],
-        html:`<div class="lm${isA?'':' dim'}${detail&&detail.stopId===mk.id?' sel':''}"><span class="lm-ico" style="border-color:${t.color}">${lmIco(mk.type)}</span>${isA?`<span class="lm-name"></span>`:''}</div>`})})
-        .bindTooltip(`${mk.name} · 랜드마크`).on('click',()=>openDetail(t.id,mk.id)).on('add',e=>{const n=e.target.getElement().querySelector('.lm-name');if(n)n.textContent=mk.name}).addTo(markerLayer)});
+    // 랜드마크: 이름 없이 픽토그램만, 가장 가까운 경유지 번호 오른쪽에 나란히
+    const slot={},sz=isA?24:20,gap=3;
+    (t.marks||[]).forEach(mk=>{let best=-1,bd=Infinity;
+      t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});
+      const at=best>=0?t.stops[best]:mk,n=best>=0?(slot[best]=(slot[best]||0)+1)-1:0;
+      const x=best>=0?-(15+n*(sz+gap)):sz/2;
+      L.marker([at.lat,at.lng],{zIndexOffset:isA?950:-100,icon:L.divIcon({className:'',iconSize:[sz,sz],iconAnchor:[x,sz/2],
+        html:`<div class="lm-ico${isA?'':' dim'}${detail&&detail.stopId===mk.id?' sel':''}" style="border-color:${t.color};width:${sz}px;height:${sz}px">${lmIco(mk.type)}</div>`})})
+        .bindTooltip(mk.name,{direction:'top'}).on('click',()=>openDetail(t.id,mk.id)).addTo(markerLayer)});
     t.stops.forEach((s,i)=>{
       const m=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',iconSize:[24,24],
         html:`<div class="pin${detail&&detail.stopId===s.id?' sel':''}" style="background:${t.color};opacity:${isA?1:.6}">${i+1}</div>`}),zIndexOffset:isA?1000:0})
