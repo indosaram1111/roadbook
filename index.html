@@ -73,6 +73,13 @@ body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--font-body);overflo
 .leg{margin-left:10px;padding:2px 0 2px 21px;border-left:2px dotted var(--line);font:12px var(--font-mono);color:var(--muted);font-variant-numeric:tabular-nums}
 .leg.road{border-left-style:solid}
 .leg{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.via{border:1px solid var(--line);background:var(--panel);border-radius:999px;width:28px;height:24px;font-size:13px;line-height:1;cursor:pointer;padding:0;flex:none;display:inline-grid;place-items:center}
+span.via{cursor:default}
+.via.on{border-color:var(--accent);background:var(--accent-soft)}
+.via-pick{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 2px}
+.via-pick .chip,.next-via .chip{padding:3px 9px;font-size:12px}
+.next-via{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+.via-ico{width:22px;height:22px;border-radius:50%;background:#fff;border:1px solid #c9d3d8;display:grid;place-items:center;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .ins{margin-left:auto;border:1px dashed var(--line);background:transparent;color:var(--accent);border-radius:999px;padding:1px 9px;font:500 11px var(--font-body);cursor:pointer}
 .ins.on{border-style:solid;border-color:var(--accent);background:var(--accent-soft)}
 #add-label{text-transform:none;letter-spacing:0;font-size:12px}
@@ -182,6 +189,10 @@ body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--font-body);overflo
       <div class="search">
         <input id="q" placeholder="도시 이름 입력 (예: ㅍ, 파리, Kyoto)" autocomplete="off">
         <ul class="results" id="results" hidden></ul>
+      </div>
+      <div class="next-via">
+        <span>이 도시까지</span>
+        <div class="chips" id="next-via"></div>
       </div>
       </div>
       <ul class="stops" id="stops" style="margin-top:10px"></ul>
@@ -344,6 +355,16 @@ function arc(a,b){ // 대권 곡선
     if(prev!==null){while(lng-prev>180)lng-=360;while(lng-prev<-180)lng+=360}prev=lng;out.push([lat,lng])}
   return out;
 }
+/* 이동 수단: 도착하는 도시(stop.via)에 저장. 자동차만 실제 도로 경로를 받아옴 */
+const VIA={car:{ico:'🚗',name:'자동차',dash:null},plane:{ico:'✈️',name:'비행기',dash:'1 8',bend:.22},
+  ship:{ico:'⛴️',name:'배',dash:'9 7',bend:.12},train:{ico:'🚆',name:'기차',dash:'14 5 3 5',bend:.06}};
+const viaOf=s=>VIA[s&&s.via]?s.via:'car';
+let nextVia='car', legEdit=null;
+function bend(a,b,k){ // 두 도시 사이를 옆으로 휘어진 곡선으로
+  let bl=b.lng;while(bl-a.lng>180)bl-=360;while(bl-a.lng<-180)bl+=360;
+  const dx=bl-a.lng,dy=b.lat-a.lat,mx=(a.lng+bl)/2,my=(a.lat+b.lat)/2,cx=mx-dy*k,cy=my+dx*k,out=[];
+  for(let i=0;i<=40;i++){const t=i/40,u=1-t;out.push([u*u*a.lat+2*u*t*cy+t*t*b.lat,u*u*a.lng+2*u*t*cx+t*t*bl])}
+  return out}
 const queue=[];let busy=false,routeOffline=false;const legFail={};
 function needLeg(a,b){const k=legKey(a,b);
   if(legCache[k]||legFail[k]||routeOffline||queue.some(q=>q.k===k))return;queue.push({k,a,b});pump()}
@@ -377,10 +398,15 @@ function drawMap(){
   routeLayer.clearLayers();markerLayer.clearLayers();
   state.trips.forEach(t=>{
     const isA=t.id===state.activeId, op=isA?1:.45;
-    for(let i=1;i<t.stops.length;i++){const a=t.stops[i-1],b=t.stops[i],leg=legCache[legKey(a,b)];
-      if(!leg)needLeg(a,b);
-      if(leg&&leg.type==='road')L.polyline(leg.pts,{color:t.color,weight:isA?4.5:3,opacity:op}).addTo(routeLayer);
-      else L.polyline(arc(a,b),{color:t.color,weight:isA?3:2,opacity:op,dashArray:'6 7'}).addTo(routeLayer);}
+    for(let i=1;i<t.stops.length;i++){const a=t.stops[i-1],b=t.stops[i],v=viaOf(b);
+      if(v==='car'){const leg=legCache[legKey(a,b)];if(!leg)needLeg(a,b);
+        if(leg&&leg.type==='road')L.polyline(leg.pts,{color:t.color,weight:isA?4.5:3,opacity:op}).addTo(routeLayer);
+        else L.polyline(arc(a,b),{color:t.color,weight:isA?3:2,opacity:op,dashArray:'6 7'}).addTo(routeLayer);
+        continue}
+      const pts=bend(a,b,VIA[v].bend);
+      L.polyline(pts,{color:t.color,weight:isA?3:2,opacity:op,dashArray:VIA[v].dash,lineCap:'round'}).addTo(routeLayer);
+      if(isA)L.marker(pts[20],{interactive:false,keyboard:false,icon:L.divIcon({className:'',iconSize:[22,22],
+        html:`<div class="via-ico" title="${VIA[v].name}">${VIA[v].ico}</div>`})}).addTo(routeLayer);}
     t.stops.forEach((s,i)=>{
       const m=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',iconSize:[24,24],
         html:`<div class="pin${detail&&detail.stopId===s.id?' sel':''}" style="background:${t.color};opacity:${isA?1:.6}">${i+1}</div>`}),zIndexOffset:isA?1000:0})
@@ -395,13 +421,14 @@ function render(){
   drawMap();
   const t=active();
   // 통계
-  let km=0;state.trips.forEach(tr=>{for(let i=1;i<tr.stops.length;i++){const l=legCache[legKey(tr.stops[i-1],tr.stops[i])];if(l)km+=l.km}});
+  let km=0;state.trips.forEach(tr=>{for(let i=1;i<tr.stops.length;i++){const a=tr.stops[i-1],b=tr.stops[i];
+    if(viaOf(b)!=='car'){km+=haversine(a,b);continue}const l=legCache[legKey(a,b)];if(l)km+=l.km}});
   $('stats').textContent=`${visitedCache.size}개국 · 여행 ${state.trips.length}개 · 총 ${fmtKm(km)}`;
   // 여행 칩
   $('trips').innerHTML='';
   state.trips.forEach(tr=>{const b=el('button','chip'+(tr.id===state.activeId?' on':''));
     b.innerHTML=`<span class="dot" style="background:${tr.color}"></span>`;b.append(tr.name||'이름 없는 여행');
-    b.onclick=()=>{state.activeId=tr.id;insertAt=null;save();render();fitTrip()};$('trips').append(b)});
+    b.onclick=()=>{state.activeId=tr.id;insertAt=null;legEdit=null;save();render();fitTrip()};$('trips').append(b)});
   if(!readOnly()){const nb=el('button','chip');nb.textContent='+ 새 여행';nb.onclick=newTrip;$('trips').append(nb)}
   if(readOnly()&&!state.trips.length)$('trips').innerHTML='<span class="empty">'+(showLoaded?'아직 공개된 여행이 없어요.':'불러오는 중…')+'</span>';
   const ro=readOnly();
@@ -410,6 +437,9 @@ function render(){
   $('tab-show').textContent=OWNER_NAME?OWNER_NAME+'의 여행 기록':'여행 기록';
   renderAccount();
   renderDetail();
+  const nv=$('next-via');nv.innerHTML='';
+  Object.entries(VIA).forEach(([k,o])=>{const c=el('button','chip'+(k===nextVia?' on':''));c.textContent=`${o.ico} ${o.name}`;
+    c.setAttribute('aria-pressed',k===nextVia);c.onclick=()=>{nextVia=k;render()};nv.append(c)});
   $('move-box').hidden=readOnly();
   $('route-banner').hidden=!(routeOffline||Object.keys(legFail).length);
   // 현재 여행
@@ -420,9 +450,16 @@ function render(){
     const ul=$('stops');ul.innerHTML='';
     if(!t.stops.length)ul.innerHTML='<li class="empty">'+(readOnly()?'경유지가 없어요.':'도시를 검색하거나 지도를 눌러 첫 경유지를 추가하세요.')+'</li>';
     t.stops.forEach((s,i)=>{
-      if(i>0){const l=legCache[legKey(t.stops[i-1],s)],li=el('li','leg'+(l&&l.type==='road'?' road':''));
-        const fk=legKey(t.stops[i-1],s);
-        const txt=el('span');txt.textContent=!l&&(routeOffline||legFail[fk])?`도로 경로 못 받음 · 직선 ${fmtKm(haversine(t.stops[i-1],s))}`:!l?'도로 경로 계산 중…':l.type==='road'?`도로 ${fmtKm(l.km)} · 약 ${fmtMin(l.min)}`:`도로 없음 · 직선 ${fmtKm(l.km)}`;li.append(txt);
+      if(i>0){const v=viaOf(s),l=v==='car'?legCache[legKey(t.stops[i-1],s)]:null,li=el('li','leg'+(v!=='car'||(l&&l.type==='road')?' road':''));
+        const fk=legKey(t.stops[i-1],s),straight=fmtKm(haversine(t.stops[i-1],s));
+        const vb=el(readOnly()?'span':'button','via'+(legEdit===i?' on':''));vb.textContent=VIA[v].ico;vb.title=VIA[v].name;
+        if(!readOnly()){vb.setAttribute('aria-label',`${i}번→${i+1}번 이동 수단: ${VIA[v].name} (바꾸기)`);vb.onclick=()=>{legEdit=legEdit===i?null:i;render()}}
+        li.append(vb);
+        const txt=el('span');txt.textContent=v!=='car'?`${VIA[v].name} · 직선 ${straight}`
+          :!l&&(routeOffline||legFail[fk])?`도로 경로 못 받음 · 직선 ${straight}`:!l?'도로 경로 계산 중…':l.type==='road'?`도로 ${fmtKm(l.km)} · 약 ${fmtMin(l.min)}`:`도로 없음 · 직선 ${fmtKm(l.km)} · 배나 비행기로 바꿔 보세요`;li.append(txt);
+        if(legEdit===i&&!readOnly()){const box=el('div','via-pick');
+          Object.entries(VIA).forEach(([k,o])=>{const c=el('button','chip'+(k===v?' on':''));c.textContent=`${o.ico} ${o.name}`;
+            c.onclick=()=>{s.via=k;legEdit=null;save();render()};box.append(c)});li.append(box)}
         if(!readOnly()){const b=el('button','ins'+(insertAt===i?' on':''));b.textContent=insertAt===i?'여기에 추가 중':'+ 사이에 추가';
           b.setAttribute('aria-label',`${i}번과 ${i+1}번 사이에 경유지 추가`);
           b.onclick=()=>{insertAt=insertAt===i?null:i;render();if(insertAt!==null){$('q').focus();toast(`${i}번과 ${i+1}번 사이에 넣을 도시를 검색하거나 지도를 누르세요.`)}};li.append(b)}
@@ -449,7 +486,7 @@ function render(){
     const c=el('span','chip');c.innerHTML=`<span class="dot" style="background:var(${v.auto?'--visit':'--manual'})"></span>`;c.append(v.name);cc.append(c)});
   $('hint').textContent=mode==='route'?'지도를 누르면 그 지점이 현재 여행의 다음 경유지로 추가돼요.':'지도에서 나라를 누르면 다녀온 나라로 표시하거나 해제해요. 경로가 지나는 나라는 자동으로 칠해져요.';
 }
-function move(i,d){insertAt=null;const s=active().stops;[s[i],s[i+d]]=[s[i+d],s[i]];save();render()}
+function move(i,d){insertAt=null;legEdit=null;const s=active().stops;[s[i],s[i+d]]=[s[i+d],s[i]];save();render()}
 function fitTrip(){const t=active();if(t&&t.stops.length)map.fitBounds(L.latLngBounds(t.stops.map(s=>[s.lat,s.lng])).pad(.3),{maxZoom:9})}
 function newTrip(){const t={id:uid(),name:'새 여행',color:COLORS[state.trips.length%COLORS.length],stops:[]};
   state.trips.push(t);state.activeId=t.id;insertAt=null;save();render();$('trip-name').select()}
@@ -489,7 +526,7 @@ $('route-retry').onclick=retryRoutes;
 /* ---------- 경유지 추가 ---------- */
 let insertAt=null; // 이 위치(배열 인덱스)에 다음 경유지를 끼워 넣음
 function addStop(s){let t=active();if(!t){newTrip();t=active()}
-  const st={id:uid(),...s};
+  const st={id:uid(),...s,via:nextVia};
   if(insertAt!==null&&insertAt>0&&insertAt<=t.stops.length){t.stops.splice(insertAt,0,st);toast(`${insertAt}번과 ${insertAt+1}번 사이에 ${s.name} 추가`);insertAt=null}
   else{t.stops.push(st);toast(`${s.name} 추가`)}
   save();render()}
@@ -838,7 +875,7 @@ const idbGet=k=>idbOp('readonly',st=>st.get(k)).catch(()=>null);
 const idbDel=k=>idbOp('readwrite',st=>st.delete(k));
 
 /* ---------- 탭 ---------- */
-function setTab(t){tab=t;insertAt=null;detail=null;state=t==='show'?showState:myState;mode='route';
+function setTab(t){tab=t;insertAt=null;legEdit=null;detail=null;state=t==='show'?showState:myState;mode='route';
   $('mode-route').classList.add('on');$('mode-country').classList.remove('on');closeResults();
   render();fitTrip();if(t==='show')loadShow()}
 $('tab-show').onclick=()=>setTab('show');
