@@ -152,7 +152,10 @@ span.via{cursor:default}
 .lm-name{font:600 12px var(--font-body);color:#1f2a33;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff}
 .lm.dim{opacity:.55}.lm.dim .lm-ico{width:22px;height:22px;font-size:12px}
 .lm.sel .lm-ico{transform:scale(1.2);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.45)}
-.lm-chip{padding:2px 4px 2px 10px}
+.lm-chip{padding:2px 4px 2px 4px;background:var(--panel)}
+.lm-open{display:inline-flex;align-items:center;gap:6px}
+.lm-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid;background:#fff;display:grid;place-items:center;font-size:12px;line-height:1;flex:none}
+.stop-marks{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 4px 32px;padding-left:0}
 .lm-open{border:0;background:transparent;color:var(--fg);font:13px var(--font-body);cursor:pointer;padding:2px 0}
 .pin.sel{transform:scale(1.25);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.45)}
 .tabs{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--line)}
@@ -531,6 +534,17 @@ function render(){
     if(document.activeElement!==$('trip-name'))$('trip-name').value=t.name;
     const ul=$('stops');ul.innerHTML='';
     if(!t.stops.length)ul.innerHTML='<li class="empty">'+(readOnly()?'경유지가 없어요.':'도시를 검색하거나 지도를 눌러 첫 경유지를 추가하세요.')+'</li>';
+    // 랜드마크는 가장 가까운 경유지 아래에 붙여서 보여줌 (번호 없음)
+    const marksBy={},loose=[];
+    (t.marks||[]).forEach((mk,k)=>{let best=-1,bd=Infinity;
+      t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});
+      if(best<0)loose.push(k);else(marksBy[best]=marksBy[best]||[]).push(k)});
+    const markChip=k=>{const mk=t.marks[k],c=el('span','chip lm-chip');const b=el('button','lm-open');
+      b.innerHTML=`<span class="lm-dot" style="border-color:${t.color}">${lmIco(mk.type)}</span>`;b.append(mk.name);
+      b.onclick=()=>openDetail(t.id,mk.id);c.append(b);
+      if(!readOnly()){const x=el('button','mini');x.textContent='×';x.setAttribute('aria-label',`${mk.name} 삭제`);
+        x.onclick=()=>{t.marks.splice(k,1);save();render()};c.append(x)}
+      return c};
     t.stops.forEach((s,i)=>{
       if(i>0){const v=viaOf(s),l=v==='car'?legCache[legKey(t.stops[i-1],s)]:null,li=el('li','leg'+(v!=='car'||(l&&l.type==='road')?' road':''));
         const fk=legKey(t.stops[i-1],s),straight=fmtKm(haversine(t.stops[i-1],s));
@@ -554,14 +568,10 @@ function render(){
         .forEach(([s2,lab,fn,dis])=>{if(dis||readOnly())return;const b=el('button','mini');b.textContent=s2;b.setAttribute('aria-label',lab);b.onclick=fn;li.append(b)});
       li.querySelector('.nm').style.cursor='pointer';li.querySelector('.nm').onclick=()=>openDetail(t.id,s.id);
       ul.append(li);
+      if(marksBy[i]){const ml=el('li','stop-marks');marksBy[i].forEach(k=>ml.append(markChip(k)));ul.append(ml)}
     });
     $('del-trip').textContent=delArmed?'정말 삭제할까요?':'여행 삭제';
-    const mks=t.marks||[],mb=$('marks');mb.innerHTML='';$('marks-box').hidden=!mks.length;
-    mks.forEach((mk,k)=>{const c=el('span','chip lm-chip');const b=el('button','lm-open');b.textContent=`${lmIco(mk.type)} ${mk.name}`;
-      b.onclick=()=>openDetail(t.id,mk.id);c.append(b);
-      if(!readOnly()){const x=el('button','mini');x.textContent='×';x.setAttribute('aria-label',`${mk.name} 삭제`);
-        x.onclick=()=>{t.marks.splice(k,1);save();render()};c.append(x)}
-      mb.append(c)});
+    const mb=$('marks');mb.innerHTML='';$('marks-box').hidden=!loose.length;loose.forEach(k=>mb.append(markChip(k)));
     if(insertAt!==null&&insertAt>=t.stops.length)insertAt=null;
     const al=$('add-label');al.innerHTML='';
     if(insertAt===null)al.textContent='경유지 추가';
