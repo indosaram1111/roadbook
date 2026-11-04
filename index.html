@@ -53,6 +53,12 @@ body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--font-body);overflo
   font:700 16px var(--font-body);padding:4px 0}
 .trip-name:focus{outline:none;border-color:var(--accent)}
 .search{position:relative}
+#edit-box{border-top:1px dashed var(--line);margin-top:6px;padding-top:2px}
+@media (min-width:760px){
+  #edit-box{position:sticky;bottom:-16px;background:var(--panel);padding-bottom:16px;z-index:5;box-shadow:0 -8px 12px -10px rgba(0,0,0,.18)}
+  #edit-box .results{position:absolute;left:0;right:0;bottom:100%;margin:0 0 6px;background:var(--panel);box-shadow:0 -4px 16px rgba(0,0,0,.15)}
+}
+@media (max-width:759px){#edit-box .results{position:relative}}
 .search input{width:100%;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:9px 12px;font:inherit}
 .results{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .results li button{width:100%;text-align:left;border:0;background:var(--panel);color:var(--fg);padding:8px 12px;font:inherit;cursor:pointer;border-top:1px solid var(--line)}
@@ -181,6 +187,7 @@ span.via{cursor:default}
 
     <div id="trip-box">
       <input class="trip-name" id="trip-name" aria-label="여행 이름">
+      <ul class="stops" id="stops" style="margin-top:10px"></ul>
       <div id="edit-box">
       <div class="search-top">
         <span class="label" id="add-label">경유지 추가</span>
@@ -195,7 +202,6 @@ span.via{cursor:default}
         <div class="chips" id="next-via"></div>
       </div>
       </div>
-      <ul class="stops" id="stops" style="margin-top:10px"></ul>
       <div class="row" style="margin-top:8px">
         <button class="iconbtn" id="fit">경로 전체 보기</button>
         <button class="iconbtn danger" id="del-trip">여행 삭제</button>
@@ -462,7 +468,7 @@ function render(){
             c.onclick=()=>{s.via=k;legEdit=null;save();render()};box.append(c)});li.append(box)}
         if(!readOnly()){const b=el('button','ins'+(insertAt===i?' on':''));b.textContent=insertAt===i?'여기에 추가 중':'+ 사이에 추가';
           b.setAttribute('aria-label',`${i}번과 ${i+1}번 사이에 경유지 추가`);
-          b.onclick=()=>{insertAt=insertAt===i?null:i;render();if(insertAt!==null){$('q').focus();toast(`${i}번과 ${i+1}번 사이에 넣을 도시를 검색하거나 지도를 누르세요.`)}};li.append(b)}
+          b.onclick=()=>{insertAt=insertAt===i?null:i;render();if(insertAt!==null){$('q').focus();$('q').scrollIntoView({block:'nearest',behavior:'smooth'});toast(`${i}번과 ${i+1}번 사이에 넣을 도시를 검색하거나 지도를 누르세요.`)}};li.append(b)}
         ul.append(li)}
       const li=el('li','stop');
       li.innerHTML=`<span class="num" style="background:${t.color}">${i+1}</span>
@@ -529,7 +535,7 @@ function addStop(s){let t=active();if(!t){newTrip();t=active()}
   const st={id:uid(),...s,via:nextVia};
   if(insertAt!==null&&insertAt>0&&insertAt<=t.stops.length){t.stops.splice(insertAt,0,st);toast(`${insertAt}번과 ${insertAt+1}번 사이에 ${s.name} 추가`);insertAt=null}
   else{t.stops.push(st);toast(`${s.name} 추가`)}
-  save();render()}
+  save();render();requestAnimationFrame(()=>$('q').scrollIntoView({block:'nearest'}))}
 /* ---------- 도시 자동완성 ---------- */
 const CITY_DATA=`대한민국>서울/Seoul/37.5665/126.978|부산/Busan/35.1796/129.0756|인천/Incheon/37.4563/126.7052|대구/Daegu/35.8714/128.6014|대전/Daejeon/36.3504/127.3845|광주/Gwangju/35.1595/126.8526|울산/Ulsan/35.5384/129.3114|세종/Sejong/36.48/127.289|수원/Suwon/37.2636/127.0286|고양/Goyang/37.6584/126.832|용인/Yongin/37.2411/127.1776|성남/Seongnam/37.42/127.1267|파주/Paju/37.76/126.78|가평/Gapyeong/37.8315/127.5105|춘천/Chuncheon/37.8813/127.7298|강릉/Gangneung/37.7519/128.8761|속초/Sokcho/38.207/128.5918|양양/Yangyang/38.0754/128.619|원주/Wonju/37.3422/127.9202|평창/Pyeongchang/37.3705/128.39|청주/Cheongju/36.6424/127.489|충주/Chungju/36.991/127.9259|단양/Danyang/36.9846/128.3655|천안/Cheonan/36.8151/127.1139|공주/Gongju/36.4465/127.119|전주/Jeonju/35.8242/127.148|군산/Gunsan/35.9676/126.7369|익산/Iksan/35.9483/126.9577|남원/Namwon/35.4164/127.3904|정읍/Jeongeup/35.5699/126.856|목포/Mokpo/34.8118/126.3922|여수/Yeosu/34.7604/127.6622|순천/Suncheon/34.9507/127.4872|나주/Naju/35.0159/126.7108|광양/Gwangyang/34.9407/127.6959|담양/Damyang/35.3211/126.9882|보성/Boseong/34.7714/127.08|해남/Haenam/34.5733/126.5992|완도/Wando/34.311/126.755|진도/Jindo/34.4867/126.2636|신안/Sinan/34.833/126.351|포항/Pohang/36.019/129.3435|경주/Gyeongju/35.8562/129.2247|안동/Andong/36.5684/128.7294|구미/Gumi/36.1195/128.3446|창원/Changwon/35.2281/128.6811|진주/Jinju/35.18/128.1076|통영/Tongyeong/34.8544/128.4331|거제/Geoje/34.8806/128.6211|김해/Gimhae/35.2285/128.8894|남해/Namhae/34.8377/127.8924|제주/Jeju/33.4996/126.5312|서귀포/Seogwipo/33.2541/126.56|부천/Bucheon/37.5034/126.766|안산/Ansan/37.3219/126.8309|안양/Anyang/37.3943/126.9568|화성/Hwaseong/37.1995/126.8313|남양주/Namyangju/37.636/127.2165|평택/Pyeongtaek/36.9921/127.1129|의정부/Uijeongbu/37.738/127.0337|시흥/Siheung/37.38/126.803|김포/Gimpo/37.6153/126.7156
 일본>도쿄/Tokyo/35.6762/139.6503|오사카/Osaka/34.6937/135.5023|교토/Kyoto/35.0116/135.7681|나라/Nara/34.6851/135.8048|고베/Kobe/34.6901/135.1955|요코하마/Yokohama/35.4437/139.638|가마쿠라/Kamakura/35.3192/139.5467|하코네/Hakone/35.2324/139.1069|닛코/Nikko/36.7199/139.6982|나고야/Nagoya/35.1815/136.9066|가나자와/Kanazawa/36.5613/136.6562|시즈오카/Shizuoka/34.9756/138.3828|후쿠오카/Fukuoka/33.5902/130.4017|기타큐슈/Kitakyushu/33.8834/130.8752|벳푸/Beppu/33.2846/131.4914|유후인/Yufuin/33.2659/131.3546|나가사키/Nagasaki/32.7503/129.8779|구마모토/Kumamoto/32.8031/130.7079|가고시마/Kagoshima/31.5966/130.5571|히로시마/Hiroshima/34.3853/132.4553|오카야마/Okayama/34.6551/133.9195|다카마쓰/Takamatsu/34.3428/134.0466|마쓰야마/Matsuyama/33.8392/132.7657|센다이/Sendai/38.2682/140.8694|삿포로/Sapporo/43.0618/141.3545|오타루/Otaru/43.1907/140.9947|하코다테/Hakodate/41.7687/140.7288|오키나와(나하)/Naha/26.2124/127.6809|사이타마/Saitama/35.8617/139.6455|지바/Chiba/35.6074/140.1065|가와사키/Kawasaki/35.5308/139.703|사가미하라/Sagamihara/35.5714/139.373|하마마쓰/Hamamatsu/34.7108/137.7261|니가타/Niigata/37.9161/139.0364|사카이/Sakai/34.5733/135.4828|히메지/Himeji/34.8151/134.6853|우쓰노미야/Utsunomiya/36.5551/139.8828|구라시키/Kurashiki/34.585/133.772|오이타/Oita/33.2382/131.6126|도야마/Toyama/36.6953/137.2113|나가노/Nagano/36.6485/138.1942|기후/Gifu/35.4233/136.7607|와카야마/Wakayama/34.2305/135.1708|미야자키/Miyazaki/31.9077/131.4202|아오모리/Aomori/40.8244/140.74|아키타/Akita/39.7199/140.1035|모리오카/Morioka/39.7036/141.1527|고치/Kochi/33.5597/133.5311|도쿠시마/Tokushima/34.0703/134.5548|마쓰모토/Matsumoto/36.238/137.972|아사히카와/Asahikawa/43.7706/142.365|구시로/Kushiro/42.9849/144.3818
