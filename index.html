@@ -110,6 +110,12 @@ span.via{cursor:default}
 .tile img{width:100%;height:100%;object-fit:cover;display:block}
 .tile.add{border:1.5px dashed var(--line);color:var(--accent);font:300 34px/1 var(--font-body);display:grid;place-items:center;background:transparent}
 .tile.add small{display:block;font:500 11px var(--font-body);margin-top:4px}
+.detail{position:relative;border-radius:12px;transition:box-shadow .15s}
+.detail.dropping{box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+.detail.dropping::after{content:"여기에 놓으면 사진이 추가돼요";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:var(--accent);color:#fff;padding:8px 14px;border-radius:999px;font:500 13px var(--font-body);pointer-events:none;white-space:nowrap}
+.drop-hint{grid-column:1/-1;font-size:12px;color:var(--muted)}
+@media (hover:none){.drop-hint{display:none}}
 .tile.busy{display:grid;place-items:center;font:12px var(--font-mono);color:var(--muted)}
 .tile.missing{display:grid;place-items:center;font-size:11px;color:var(--muted);padding:6px;text-align:center}
 .lightbox{position:fixed;inset:0;z-index:3000;background:rgba(8,12,15,.94);display:grid;place-items:center;
@@ -828,7 +834,8 @@ function renderDetail(){
       else{b.className='tile missing';b.textContent=p.path?'서버 설정 후 보여요':'다른 기기에 저장된 사진'}});
     b.onclick=()=>openLB(k)});
   if(uploading){const b=el('div','tile busy');b.textContent=`올리는 중 ${uploading.done}/${uploading.total}`;g.append(b)}
-  if(!ro){const a=el('button','tile add');a.innerHTML='+<small>사진 추가</small>';a.onclick=()=>$('d-file').click();g.append(a)}
+  if(!ro){const a=el('button','tile add');a.innerHTML='+<small>사진 추가</small>';a.onclick=()=>$('d-file').click();g.append(a);
+    const h=el('div','drop-hint');h.textContent='PC에서는 사진 파일을 이 칸으로 끌어다 놓아도 돼요.';g.append(h)}
   if(ro&&!photos.length){const e=el('div','empty');e.textContent='아직 사진이 없어요.';e.style.gridColumn='1/-1';g.append(e)}
 }
 /* 사진 줄이기: 긴 변 1600px JPEG */
@@ -837,8 +844,10 @@ async function shrink(file){
   const k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement('canvas');
   c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
   return new Promise(ok=>c.toBlob(ok,'image/jpeg',.85))}
-$('d-file').onchange=async e=>{
-  const files=[...e.target.files];e.target.value='';const d=detailStop();if(!d||!files.length)return;
+$('d-file').onchange=e=>{const files=[...e.target.files];e.target.value='';uploadFiles(files)};
+async function uploadFiles(files){
+  files=files.filter(f=>/^image\//.test(f.type)||/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name));
+  const d=detailStop();if(!d||readOnly())return;if(!files.length){toast('사진 파일만 추가할 수 있어요.');return}
   const stop=d.s;stop.photos=stop.photos||[];uploading={done:0,total:files.length};render();
   let fail=0;
   for(const f of files){
@@ -851,7 +860,18 @@ $('d-file').onchange=async e=>{
     uploading.done++;renderDetail()}
   uploading=null;render();
   if(fail)toast(`${fail}장은 올리지 못했어요. 사진 형식이나 연결을 확인해 주세요.`);
-  else if(!session)toast('로그인 전이라 사진이 이 기기에만 저장됐어요.')};
+  else if(!session)toast('로그인 전이라 사진이 이 기기에만 저장됐어요.')}
+
+/* PC: 사진 파일을 사진 칸으로 끌어다 놓기 */
+let dragDepth=0;
+const hasFiles=e=>e.dataTransfer&&[...e.dataTransfer.types].includes('Files');
+$('detail').addEventListener('dragenter',e=>{if(!hasFiles(e)||readOnly())return;e.preventDefault();dragDepth++;$('detail').classList.add('dropping')});
+$('detail').addEventListener('dragover',e=>{if(!hasFiles(e)||readOnly())return;e.preventDefault();e.dataTransfer.dropEffect='copy'});
+$('detail').addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;$('detail').classList.remove('dropping')}});
+$('detail').addEventListener('drop',e=>{if(!hasFiles(e))return;e.preventDefault();dragDepth=0;$('detail').classList.remove('dropping');uploadFiles([...e.dataTransfer.files])});
+// 칸 밖에 잘못 떨어뜨려도 브라우저가 사진 파일을 열어버리지 않게
+addEventListener('dragover',e=>{if(hasFiles(e))e.preventDefault()});
+addEventListener('drop',e=>{if(hasFiles(e)){e.preventDefault();if(detail&&!readOnly())toast('사진 칸 위에 놓아 주세요.')}});
 
 /* 크게 보기 */
 let lbIdx=0,lbDelArm=false;
