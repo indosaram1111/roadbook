@@ -137,6 +137,15 @@ span.via{cursor:default}
   padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .sheet{background:var(--panel);color:var(--fg);border-radius:14px;padding:16px;width:min(520px,100%);display:flex;flex-direction:column;gap:10px}
 .sheet textarea{width:100%;height:180px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:8px;font:11px/1.4 var(--font-mono);resize:vertical}
+.clabel,.tlabel{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;font-family:var(--font-body);
+  text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff}
+.clabel{font-size:11px;font-weight:500;letter-spacing:.06em;color:#6b7780}
+.clabel.mid{font-size:12.5px}
+.clabel.huge{font-size:15px;letter-spacing:.14em}
+.clabel.visited{color:#0f6e64;font-weight:700}
+.clabel.marked{color:#b26a12;font-weight:700}
+.tlabel{transform:translate(-4px,-50%);font-size:11px;color:#2c3740;display:flex;align-items:center;gap:4px}
+.tlabel i{width:5px;height:5px;border-radius:50%;background:#55626b;flex:none}
 .pin.sel{transform:scale(1.25);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.45)}
 .tabs{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--line)}
 .tabs button{border:0;background:transparent;color:var(--muted);padding:11px 8px;font:500 14px var(--font-body);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -306,9 +315,8 @@ const map=L.map('map',{zoomControl:false,worldCopyJump:true}).setView([40,60],3)
 L.control.zoom({position:'topright'}).addTo(map);
 map.createPane('land').style.zIndex=250;
 map.createPane('labels').style.zIndex=320;
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{pane:'labels',maxNativeZoom:16,
-  maxZoom:19,
-  attribution:'지명 &copy; Esri · 국경 Natural Earth · 경로 &copy; OpenStreetMap, OSRM'}).addTo(map);
+map.attributionControl.addAttribution('국경 Natural Earth · 경로 &copy; OpenStreetMap, OSRM');
+const labelLayer=L.layerGroup().addTo(map);
 
 let countries=[], countryLayer=null;
 const routeLayer=L.layerGroup().addTo(map), markerLayer=L.layerGroup().addTo(map);
@@ -325,6 +333,7 @@ function fixFeature(f){const g=f.geometry;if(!g||f.id==='010')return f; // 남�
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json').then(r=>r.json()).then(topo=>{
   countries=topojson.feature(topo,topo.objects.countries).features.filter(f=>f.geometry).map(fixFeature);
   countryLayer=L.geoJSON({type:'FeatureCollection',features:countries},{pane:'land',interactive:false,style:countryStyle}).addTo(map);
+  prepCountryLabels();
   render();
 }).catch(()=>toast('국가 경계를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
 
@@ -347,7 +356,7 @@ function visited(){
   const v=new Map();
   if(countries.length)state.trips.forEach(t=>t.stops.forEach(s=>{
     const k=s.lat+','+s.lng;if(ciCache[k]===undefined)ciCache[k]=countryAt(s.lat,s.lng);const ci=ciCache[k];
-    if(ci>=0&&!v.has(ci))v.set(ci,{name:s.country||countries[ci].properties.name,auto:true})}));
+    if(ci>=0&&!v.has(ci))v.set(ci,{name:koCountry(countries[ci]),auto:true})}));
   for(const[k,name]of Object.entries(state.manual)){const i=+k;if(!v.has(i))v.set(i,{name,auto:false})}
   return v;
 }
@@ -358,6 +367,43 @@ function countryStyle(f){
                :{stroke:true,color:'#d9902a',weight:1.2,fillColor:'#f8e2b8',fillOpacity:1};
 }
 let visitedCache=new Map();
+
+/* ---------- 한글 지명: 나라 이름(면적이 작을수록 더 확대해야 보임) + 주요 도시 ---------- */
+const ISO_N2A='004AF 008AL 010AQ 012DZ 016AS 020AD 024AO 028AG 031AZ 032AR 036AU 040AT 044BS 048BH 050BD 051AM 052BB 056BE 060BM 064BT 068BO 070BA 072BW 076BR 084BZ 086IO 090SB 092VG 096BN 100BG 104MM 108BI 112BY 116KH 120CM 124CA 132CV 136KY 140CF 144LK 148TD 152CL 156CN 158TW 170CO 174KM 178CG 180CD 184CK 188CR 191HR 192CU 196CY 203CZ 204BJ 208DK 212DM 214DO 218EC 222SV 226GQ 231ET 232ER 233EE 234FO 238FK 239GS 242FJ 246FI 248AX 250FR 258PF 260TF 262DJ 266GA 268GE 270GM 275PS 276DE 288GH 296KI 300GR 304GL 308GD 316GU 320GT 324GN 328GY 332HT 334HM 336VA 340HN 344HK 348HU 352IS 356IN 360ID 364IR 368IQ 372IE 376IL 380IT 384CI 388JM 392JP 398KZ 400JO 404KE 408KP 410KR 414KW 417KG 418LA 422LB 426LS 428LV 430LR 434LY 438LI 440LT 442LU 446MO 450MG 454MW 458MY 462MV 466ML 470MT 478MR 480MU 484MX 492MC 496MN 498MD 499ME 500MS 504MA 508MZ 512OM 516NA 520NR 524NP 528NL 531CW 533AW 534SX 540NC 548VU 554NZ 558NI 562NE 566NG 570NU 574NF 578NO 580MP 583FM 584MH 585PW 586PK 591PA 598PG 600PY 604PE 608PH 612PN 616PL 620PT 624GW 626TL 630PR 634QA 642RO 643RU 646RW 652BL 654SH 659KN 660AI 662LC 663MF 666PM 670VC 674SM 678ST 682SA 686SN 688RS 690SC 694SL 702SG 703SK 704VN 705SI 706SO 710ZA 716ZW 724ES 728SS 729SD 732EH 740SR 748SZ 752SE 756CH 760SY 762TJ 764TH 768TG 776TO 780TT 784AE 788TN 792TR 795TM 796TC 798TV 800UG 804UA 807MK 818EG 826GB 831GG 832JE 833IM 834TZ 840US 850VI 854BF 858UY 860UZ 862VE 876WF 882WS 887YE 894ZM';
+const N2A={};ISO_N2A.split(' ').forEach(x=>N2A[x.slice(0,3)]=x.slice(3));
+const KO_FIX={CD:'콩고민주공화국',CG:'콩고',PS:'팔레스타인',US:'미국'};
+const KO_BY_EN={Kosovo:'코소보','N. Cyprus':'북키프로스',Somaliland:'소말릴란드'};
+let regionKo=null;try{regionKo=new Intl.DisplayNames(['ko'],{type:'region'})}catch(e){}
+function koCountry(f){const a=N2A[f.id];if(a&&KO_FIX[a])return KO_FIX[a];
+  if(a&&regionKo){try{const n=regionKo.of(a);if(n&&n!==a)return n}catch(e){}}
+  return KO_BY_EN[f.properties.name]||f.properties.name}
+const countryLabels=[]; // {i, name, lat, lng, minZ}
+function ringArea(r){let a=0,cx=0,cy=0;for(let i=0,j=r.length-1;i<r.length;j=i++){const f=r[j][0]*r[i][1]-r[i][0]*r[j][1];a+=f;cx+=(r[j][0]+r[i][0])*f;cy+=(r[j][1]+r[i][1])*f}
+  a/=2;return a?{a:Math.abs(a),x:cx/(6*a),y:cy/(6*a)}:{a:0,x:r[0][0],y:r[0][1]}}
+function prepCountryLabels(){countryLabels.length=0;
+  countries.forEach((f,i)=>{if(f.id==='010')return;let best=null,total=0;
+    polys(f).forEach(p=>{const c=ringArea(p[0]);const corr=c.a*Math.cos(c.y*Math.PI/180);total+=corr;if(!best||corr>best.corr)best={...c,corr}});
+    if(!best||!total)return;
+    let x=best.x;if(!inRing([x,best.y],polys(f).find(p=>ringArea(p[0]).a===best.a)[0])){ // 중심이 바깥이면 가장 큰 고리의 한 점 근처로
+      const r=polys(f).find(p=>ringArea(p[0]).a===best.a)[0];x=r[Math.floor(r.length/2)][0];best.y=r[Math.floor(r.length/2)][1]}
+    const minZ=Math.max(2,Math.min(9,Math.round(6.6-1.5*Math.log10(total))));
+    countryLabels.push({i,name:koCountry(f),lat:best.y,lng:x>180?x-360:x,minZ,big:total})});
+  updateLabels()}
+function cityMinZ(c,rank){if(TOP.has(c.name))return 4;return rank===0?5:rank<3?6:rank<8?7:8}
+let labelTimer=null;
+function updateLabels(){cancelAnimationFrame(labelTimer);labelTimer=requestAnimationFrame(drawLabels)}
+function drawLabels(){labelLayer.clearLayers();const z=map.getZoom(),b=map.getBounds().pad(.2);
+  const inView=(lat,lng)=>b.contains([lat,lng])||b.contains([lat,lng+360])||b.contains([lat,lng-360]);
+  countryLabels.forEach(c=>{if(c.minZ>z||!inView(c.lat,c.lng))return;const v=visitedCache.get(c.i);
+    const cls='clabel'+(v?(v.auto?' visited':' marked'):'')+(c.big>400?' huge':c.big>40?' mid':'');
+    L.marker([c.lat,c.lng],{interactive:false,keyboard:false,icon:L.divIcon({className:'',iconSize:[0,0],
+      html:`<div class="${cls}">${c.name}</div>`})}).addTo(labelLayer)});
+  if(z<4)return;const seen={};
+  CITIES.forEach(c=>{const rank=seen[c.country]=(seen[c.country]===undefined?0:seen[c.country]+1);
+    if(cityMinZ(c,rank)>z||!inView(c.lat,c.lng))return;
+    L.marker([c.lat,c.lng],{interactive:false,keyboard:false,icon:L.divIcon({className:'',iconSize:[0,0],
+      html:`<div class="tlabel"><i></i>${c.name.replace(/\(.*\)/,'')}</div>`})}).addTo(labelLayer)})}
+map.on('zoomend moveend',updateLabels);
 
 /* ---------- 경로 계산 ---------- */
 const legKey=(a,b)=>`${a.lat.toFixed(4)},${a.lng.toFixed(4)};${b.lat.toFixed(4)},${b.lng.toFixed(4)}`;
@@ -437,6 +483,7 @@ function render(){
   visitedCache=visited();
   if(countryLayer)countryLayer.setStyle(countryStyle);
   drawMap();
+  if(countryLabels.length)updateLabels();
   const t=active();
   // 통계
   let km=0;state.trips.forEach(tr=>{for(let i=1;i<tr.stops.length;i++){const a=tr.stops[i-1],b=tr.stops[i];
@@ -796,7 +843,7 @@ map.on('click',async e=>{
     if(!countries.length)return;const i=countryAt(lat,lng);if(i<0)return;
     if(state.manual[i]!==undefined){delete state.manual[i];save();render();return}
     if(visitedCache.get(i)&&visitedCache.get(i).auto){toast('경로가 지나는 나라라 이미 표시돼 있어요.');return}
-    state.manual[i]=countries[i].properties.name;save();render();
+    state.manual[i]=koCountry(countries[i]);save();render();
     try{const r=await fetch(`${NOMI}reverse?format=jsonv2&zoom=3&accept-language=ko&lat=${lat}&lon=${lng}`);const j=await r.json();
       if(j.address&&j.address.country&&state.manual[i]!==undefined){state.manual[i]=j.address.country;save();render()}}catch(err){}
     return;
