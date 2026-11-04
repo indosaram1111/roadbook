@@ -108,6 +108,12 @@ span.via{cursor:default}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .tile{position:relative;aspect-ratio:1;max-width:100%;border-radius:8px;overflow:hidden;background:var(--bg);border:0;padding:0;cursor:pointer}
 .tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile-wrap{position:relative;aspect-ratio:1;min-width:0}
+.tile-wrap .tile{width:100%;height:100%}
+.tile-x{position:absolute;top:5px;right:5px;min-width:24px;height:24px;padding:0 6px;border:0;border-radius:999px;
+  background:rgba(15,20,25,.62);color:#fff;font:500 15px/24px var(--font-body);cursor:pointer;opacity:.85}
+.tile-x:hover,.tile-x:focus-visible{opacity:1;background:rgba(15,20,25,.82)}
+.tile-x.armed{background:#c0392b;font-size:12px;opacity:1}
 .tile.add{border:1.5px dashed var(--line);color:var(--accent);font:300 34px/1 var(--font-body);display:grid;place-items:center;background:transparent}
 .tile.add small{display:block;font:500 11px var(--font-body);margin-top:4px}
 .detail{position:relative;border-radius:12px;transition:box-shadow .15s}
@@ -829,10 +835,15 @@ function renderDetail(){
   $('d-name').textContent=s.name;$('d-sub').textContent=[s.country,t.name].filter(Boolean).join(' · ');
   $('d-count').textContent=photos.length?`사진 ${photos.length}장`:'사진';
   const g=$('d-grid');g.innerHTML='';
-  photos.forEach((p,k)=>{const b=el('button','tile');b.setAttribute('aria-label',`${s.name} 사진 ${k+1}`);g.append(b);
+  photos.forEach((p,k)=>{const w=el('div','tile-wrap'),b=el('button','tile');b.setAttribute('aria-label',`${s.name} 사진 ${k+1} 크게 보기`);w.append(b);g.append(w);
     photoURL(p).then(u=>{if(u){const im=el('img');im.loading='lazy';im.alt='';im.src=u;b.append(im)}
       else{b.className='tile missing';b.textContent=p.path?'서버 설정 후 보여요':'다른 기기에 저장된 사진'}});
-    b.onclick=()=>openLB(k)});
+    b.onclick=()=>openLB(k);
+    if(!ro){const x=el('button','tile-x'+(delArmId===p.id?' armed':''));x.textContent=delArmId===p.id?'삭제':'×';
+      x.setAttribute('aria-label',delArmId===p.id?'한 번 더 누르면 삭제':`사진 ${k+1} 삭제`);
+      x.onclick=ev=>{ev.stopPropagation();
+        if(delArmId!==p.id){delArmId=p.id;clearTimeout(delArmT);delArmT=setTimeout(()=>{delArmId=null;renderDetail()},3000);renderDetail();return}
+        delArmId=null;deletePhoto(s,p.id)};w.append(x)}});
   if(uploading){const b=el('div','tile busy');b.textContent=`올리는 중 ${uploading.done}/${uploading.total}`;g.append(b)}
   if(!ro){const a=el('button','tile add');a.innerHTML='+<small>사진 추가</small>';a.onclick=()=>$('d-file').click();g.append(a);
     const h=el('div','drop-hint');h.textContent='PC에서는 사진 파일을 이 칸으로 끌어다 놓아도 돼요.';g.append(h)}
@@ -887,9 +898,12 @@ $('lb-prev').onclick=()=>{lbIdx--;lbDelArm=false;showLB()};
 $('lb-next').onclick=()=>{lbIdx++;lbDelArm=false;showLB()};
 document.addEventListener('keydown',e=>{if($('lb').hidden)return;
   if(e.key==='Escape')$('lb').hidden=true;if(e.key==='ArrowLeft')$('lb-prev').click();if(e.key==='ArrowRight')$('lb-next').click()});
+let delArmId=null,delArmT=null;
+async function deletePhoto(stop,id){const k=(stop.photos||[]).findIndex(x=>x.id===id);if(k<0)return;
+  const[p]=stop.photos.splice(k,1);save();render();toast('사진을 삭제했어요.');
+  try{if(p.path&&sb)await sb.storage.from('photos').remove([p.path]);if(p.local)await idbDel(p.id)}catch(err){}}
 $('lb-del').onclick=async()=>{if(!lbDelArm){lbDelArm=true;showLB();return}
-  const d=detailStop();const[p]=d.s.photos.splice(lbIdx,1);lbDelArm=false;save();render();showLB();
-  try{if(p.path&&sb)await sb.storage.from('photos').remove([p.path]);if(p.local)await idbDel(p.id)}catch(err){}};
+  const d=detailStop();const p=d.s.photos[lbIdx];lbDelArm=false;await deletePhoto(d.s,p.id);showLB()};
 
 /* 이 기기 저장소 (로그인 전 사진) */
 function idb(){return new Promise((ok,no)=>{const r=indexedDB.open('roadbook-photos',1);
