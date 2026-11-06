@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 <style>
 /* Layout: 지도 전체 화면 + 데스크톱은 왼쪽 패널, 폰은 아래쪽 시트 */
 :root{
@@ -163,6 +164,28 @@ span.via{cursor:default}
 .lm-dot.sm{display:inline-grid;width:20px;height:20px;border-color:var(--line);vertical-align:-5px}
 .stop-marks{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 4px 32px;padding-left:0}
 .lm-open{border:0;background:transparent;color:var(--fg);font:13px var(--font-body);cursor:pointer;padding:2px 0}
+.col{position:fixed;inset:0;z-index:2200;background:var(--bg);display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.col-head{display:flex;align-items:center;gap:10px;padding:14px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));background:var(--accent);color:#fff}
+.col-head h2{margin:0;font-size:18px}.col-head .stats{color:rgba(255,255,255,.85)}
+.col-head .iconbtn{color:#fff;border-color:rgba(255,255,255,.5)}
+.col-body{flex:1;overflow-y:auto;padding:14px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px;max-width:760px;width:100%;margin:0 auto}
+.col-card{background:var(--panel);border-radius:16px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.col-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px}
+.col-h h3{margin:0;font-size:17px}
+.col-count{font:500 13px var(--font-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.col-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:8px}
+.col-it{aspect-ratio:1;border-radius:50%;border:0;padding:0;background:var(--bg);cursor:pointer;overflow:hidden;display:grid;place-items:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.18);font-size:20px;transition:transform .12s}
+.col-it:hover,.col-it:focus-visible{transform:scale(1.08)}
+.col-it .fi{width:100%;height:100%;background-size:cover;display:block;border-radius:50%}
+.col-it .lm-img,.col-it .lm-svg{width:100%;height:100%}
+.col-it .lm-svg{width:64%;height:64%}
+.col-it.off{filter:grayscale(1);opacity:.4}
+.col-more{display:block;margin:14px auto 0;border:0;background:none;color:var(--accent);font:500 15px var(--font-body);cursor:pointer}
+.col-tip{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);
+  padding:8px 14px;border-radius:10px;font-size:13px;max-width:90vw;text-align:center}
+@media (prefers-reduced-motion:reduce){.col-it{transition:none}}
 .pin.sel{transform:scale(1.25);box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(0,0,0,.45)}
 .tabs{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--line)}
 .tabs button{border:0;background:transparent;color:var(--muted);padding:11px 8px;font:500 14px var(--font-body);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -187,6 +210,7 @@ span.via{cursor:default}
       <h1>로드북</h1>
       <div class="stats" id="stats"></div>
     </div>
+    <button class="iconbtn" id="col-open" aria-label="컬렉션 보기">컬렉션</button>
     <button class="iconbtn" id="fold" aria-label="패널 접기">접기</button>
   </div>
   <div class="tabs" role="tablist">
@@ -271,6 +295,25 @@ span.via{cursor:default}
   <div class="lb-bar"><span id="lb-pos"></span><button class="lb-del" id="lb-del">사진 삭제</button></div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<section class="col" id="col" hidden aria-label="컬렉션">
+  <header class="col-head">
+    <div class="grow"><h2 id="col-title">컬렉션</h2><div class="stats" id="col-sub"></div></div>
+    <button class="iconbtn" id="col-close">닫기</button>
+  </header>
+  <div class="col-body">
+    <div class="col-card">
+      <div class="col-h"><h3>모은 국기</h3><span class="col-count" id="col-fcount"></span></div>
+      <div class="col-grid flags" id="col-flags"></div>
+      <button class="col-more" id="col-fmore"></button>
+    </div>
+    <div class="col-card">
+      <div class="col-h"><h3 id="col-lt">TOP 100 랜드마크</h3><span class="col-count" id="col-lcount"></span></div>
+      <div class="col-grid sights" id="col-sights"></div>
+      <button class="col-more" id="col-lmore"></button>
+    </div>
+  </div>
+  <div class="col-tip" id="col-tip" hidden></div>
+</section>
 <div class="modal" id="mv" hidden>
   <div class="sheet">
     <b id="mv-title"></b>
@@ -533,6 +576,7 @@ function render(){
   $('tab-show').textContent=OWNER_NAME?OWNER_NAME+'의 여행 기록':'여행 기록';
   renderAccount();
   renderDetail();
+  renderCollection();
   const nv=$('next-via');nv.innerHTML='';
   Object.entries(VIA).forEach(([k,o])=>{const c=el('button','chip'+(k===nextVia?' on':''));c.textContent=`${o.ico} ${o.name}`;
     c.setAttribute('aria-pressed',k===nextVia);c.onclick=()=>{nextVia=k;render()};nv.append(c)});
@@ -1148,6 +1192,44 @@ async function idbOp(mode,fn){const db=await idb();return new Promise((ok,no)=>{
 const idbPut=(k,v)=>idbOp('readwrite',st=>st.put(v,k));
 const idbGet=k=>idbOp('readonly',st=>st.get(k)).catch(()=>null);
 const idbDel=k=>idbOp('readwrite',st=>st.delete(k));
+
+/* ---------- 컬렉션: 모은 국기 + TOP 랜드마크 ---------- */
+const TOP_SIGHTS='두바이몰|타임스스퀘어|월트 디즈니 월드|센트럴파크|라스베이거스 스트립|그랜드 바자르|마스지드 알하람|황금사원|서호|센소지|자금성|이화원|디즈니랜드|유니버설 스튜디오 재팬|장자제 국가삼림공원|도쿄디즈니랜드|베르사유 궁전|기자 피라미드|노트르담 대성당|콜로세움|나이아가라 폭포|상하이 디즈니랜드|사크레쾨르 대성당|병마용|시드니 오페라하우스|통곡의 벽|구랑위|만리장성 바다링|금문교|짜뚜짝 시장|메이지신궁|후시미 이나리 신사|성 베드로 대성당|트레비 분수|루브르 박물관|판테온|아크로폴리스|링컨 기념관|방콕 왕궁|산타모니카 피어|스탠리 파크|타지마할|주자이거우|빅토리아 피크|시스티나 성당|경복궁|앙코르와트|셰이크 자이드 그랜드 모스크|대영박물관|홍콩 디즈니랜드|에펠탑|쾰른 대성당|슈테판 대성당|메트로폴리탄 미술관|아야소피아|블루 모스크|기요미즈데라|우피치 미술관|피사의 사탑|태산|사그라다 파밀리아|올드 페이스풀|그랜드캐니언 사우스림|이쓰쿠시마 신사|레이크 루이스|폼페이 유적|테이데산|하프돔|오르세 미술관|자유의 여신상|프라도 미술관|바간 사원 평원|이과수 폭포|황산|둔황 막고굴|런던탑|몽생미셸 수도원|에르미타주 미술관|에페소스|알함브라 궁전|하롱베이|프람바난|메테오라 수도원|도다이지|치첸이트사|파묵칼레 석회붕|프라하성|히로시마 평화기념공원|암베르성|에든버러성|웨스트민스터 사원|테오티우아칸|아우슈비츠|하와이 화산 국립공원|히메지성|플리트비체 호수 국립공원|슈리성|노이슈반슈타인성|스톤헨지|보로부두르|천안문광장|와이탄|시부야 스크램블 교차로|람블라스 거리|산마르코 광장|붉은 광장|도톤보리|광화문광장|마리엔 광장|스페인 계단|포로 로마노|제마 엘프나 광장|카오산로드|소칼로|와이키키 해변|코파카바나 해변|해운대해수욕장|롯데월드타워|유니버설 스튜디오 할리우드|디즈니랜드 파리|유니버설 스튜디오 싱가포르|센토사섬|마리나베이샌즈|스미스소니언|그리피스 천문대|911 메모리얼|브루클린 브리지|할리우드 사인|런던아이|버킹엄 궁전|타워브리지|세인트폴 대성당|피렌체 두오모|베키오 다리|리알토 다리|쇤브룬 궁전|레이크스 미술관|반 고흐 미술관|안네 프랑크의 집|톱카프 궁전|갈라타 탑|괴레메 야외박물관|개선문|몬테카를로 카지노|아토미움|오줌싸개 동상|이스트사이드 갤러리|라이히스타크|하이델베르크성|프라하 천문시계|어부의 요새|세체니 온천|비엘리치카 소금광산|두브로브니크 성벽|할슈타트 호수|블레드 호수|메스키타|카사 바트요|스페인 광장|마드리드 왕궁|구겐하임 빌바오|산티아고 대성당|몬세라트 수도원|제로니무스 수도원|페나성|렐루 서점|니하운|티볼리 공원|감라스탄|페테르고프 궁전|도쿄타워|금각사|아라시야마 대나무숲|천단|동방명주탑|예원|타이베이101|국립고궁박물원|지우펀|창덕궁|남이섬|감천문화마을|불국사|성산일출봉|왓아룬|왓포|피피섬|바투동굴|타나롯 사원|부르즈 알 아랍|팜 주메이라|루브르 아부다비|이집트 박물관|카르나크 신전|성묘교회|바위의 돔|빵산|테이블 마운틴|하버 브리지|알카트라즈섬'.split('|');
+let colAllFlags=false,colTop=100,colTipT=null;
+function colTip(t){const e=$('col-tip');e.textContent=t;e.hidden=false;clearTimeout(colTipT);colTipT=setTimeout(()=>e.hidden=true,2200)}
+function renderCollection(){
+  if($('col').hidden)return;
+  const owner=readOnly()?(OWNER_NAME?OWNER_NAME+'의 ':'')+'컬렉션':'내 컬렉션';
+  $('col-title').textContent=owner;
+  // 국기
+  const vis=visitedCache,fl=$('col-flags');fl.innerHTML='';
+  const all=[];countries.forEach((f,i)=>{const a=N2A[f.id];if(a&&f.id!=='010')all.push({i,a,name:koCountry(f)})});
+  const seen=new Set();const uniq=all.filter(c=>!seen.has(c.a)&&seen.add(c.a));
+  const got=uniq.filter(c=>vis.has(c.i)).sort((x,y)=>x.name.localeCompare(y.name,'ko'));
+  const rest=uniq.filter(c=>!vis.has(c.i)).sort((x,y)=>x.name.localeCompare(y.name,'ko'));
+  $('col-fcount').textContent=countries.length?`${got.length} / ${uniq.length}`:'불러오는 중…';
+  (colAllFlags?got.concat(rest):got).forEach(c=>{const b=el('button','col-it'+(vis.has(c.i)?'':' off'));
+    b.innerHTML=`<span class="fi fi-${c.a.toLowerCase()} fis"></span>`;b.setAttribute('aria-label',c.name+(vis.has(c.i)?' (다녀옴)':''));
+    b.onclick=()=>colTip(c.name+(vis.has(c.i)?' · 다녀왔어요':' · 아직이에요'));fl.append(b)});
+  if(!got.length&&!colAllFlags){const e=el('div','empty');e.style.gridColumn='1/-1';e.textContent='아직 모은 국기가 없어요. 경로나 랜드마크를 추가하면 그 나라 국기가 모여요.';fl.append(e)}
+  $('col-fmore').textContent=colAllFlags?'다녀온 나라만 보기':'안 가본 나라도 보기';
+  // 랜드마크
+  const marks=new Set();state.trips.forEach(t=>(t.marks||[]).forEach(m=>marks.add(m.name)));
+  const list=TOP_SIGHTS.slice(0,colTop).map(n=>LANDMARKS.find(l=>l.name===n)).filter(Boolean);
+  const done=list.filter(l=>marks.has(l.name)).length;
+  $('col-lt').textContent=`TOP ${colTop} 랜드마크`;$('col-lcount').textContent=`${done} / ${list.length}`;
+  const sg=$('col-sights');sg.innerHTML='';
+  list.forEach((l,k)=>{const on=marks.has(l.name),b=el('button','col-it'+(on?'':' off'));b.innerHTML=lmIcon(l);
+    b.setAttribute('aria-label',`${k+1}위 ${l.name}`+(on?' (다녀옴)':''));
+    b.onclick=()=>{colTip(`${k+1}위 ${l.name} · ${l.city?l.city+', ':''}${l.country}`+(on?' · 다녀왔어요':''));};sg.append(b)});
+  $('col-lmore').textContent=colTop===100?'101~200위까지 보기':'TOP 100만 보기';
+  $('col-sub').textContent=`국기 ${got.length}개 · 랜드마크 ${done}곳`;
+}
+$('col-open').onclick=()=>{$('col').hidden=false;renderCollection();$('col-close').focus()};
+$('col-close').onclick=()=>{$('col').hidden=true};
+$('col-fmore').onclick=()=>{colAllFlags=!colAllFlags;renderCollection()};
+$('col-lmore').onclick=()=>{colTop=colTop===100?200:100;renderCollection()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('col').hidden)$('col').hidden=true});
 
 /* ---------- 탭 ---------- */
 function setTab(t){tab=t;insertAt=null;legEdit=null;detail=null;state=t==='show'?showState:myState;mode='route';
