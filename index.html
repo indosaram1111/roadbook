@@ -392,6 +392,7 @@ const labelLayer=L.layerGroup().addTo(map);
 
 let countries=[], countryLayer=null;
 const routeLayer=L.layerGroup().addTo(map), markerLayer=L.layerGroup().addTo(map);
+const lmLayer=L.layerGroup();
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 /* 날짜변경선(±180°)을 넘는 고리는 서쪽 좌표를 +360 해서 이어 붙임 → 가로줄 방지 */
@@ -476,6 +477,10 @@ function drawLabels(){labelLayer.clearLayers();const z=map.getZoom(),b=map.getBo
     L.marker([c.lat,c.lng],{interactive:false,keyboard:false,icon:L.divIcon({className:'',iconSize:[0,0],
       html:`<div class="tlabel"><i></i>${c.name.replace(/\(.*\)/,'')}</div>`})}).addTo(labelLayer)})}
 map.on('zoomend moveend',updateLabels);
+/* 랜드마크 아이콘은 어느 정도 확대했을 때만 보임 */
+const LM_MIN_ZOOM=5;
+function syncLmLayer(){const on=map.getZoom()>=LM_MIN_ZOOM;if(on&&!map.hasLayer(lmLayer))lmLayer.addTo(map);else if(!on&&map.hasLayer(lmLayer))map.removeLayer(lmLayer)}
+map.on('zoomend',syncLmLayer);syncLmLayer();
 
 /* ---------- 경로 계산 ---------- */
 const legKey=(a,b)=>`${a.lat.toFixed(4)},${a.lng.toFixed(4)};${b.lat.toFixed(4)},${b.lng.toFixed(4)}`;
@@ -531,7 +536,7 @@ async function pump(){
 const fmtKm=k=>Math.round(k).toLocaleString('ko-KR')+'km';
 const fmtMin=m=>{const h=Math.floor(m/60),mm=Math.round(m%60);return h?`${h}시간 ${mm}분`:`${mm}분`};
 function drawMap(){
-  routeLayer.clearLayers();markerLayer.clearLayers();
+  routeLayer.clearLayers();markerLayer.clearLayers();lmLayer.clearLayers();
   state.trips.forEach(t=>{
     const isA=t.id===state.activeId, op=isA?1:.45;
     for(let i=1;i<t.stops.length;i++){const a=t.stops[i-1],b=t.stops[i],v=viaOf(b);
@@ -548,10 +553,11 @@ function drawMap(){
     (t.marks||[]).forEach(mk=>{let best=-1,bd=Infinity;
       t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});
       const at=best>=0?t.stops[best]:mk,n=best>=0?(slot[best]=(slot[best]||0)+1)-1:0;
-      const x=best>=0?-(15+n*(sz+gap)):sz/2;
-      L.marker([at.lat,at.lng],{zIndexOffset:isA?950:-100,icon:L.divIcon({className:'',iconSize:[sz,sz],iconAnchor:[x,sz/2],
+      const col=n%3,row=Math.floor(n/3); // 한 줄에 3개, 넘으면 아래 줄로
+      const x=best>=0?-(15+col*(sz+gap)):sz/2,y=best>=0?sz/2-row*(sz+gap):sz/2;
+      L.marker([at.lat,at.lng],{zIndexOffset:isA?950:-100,icon:L.divIcon({className:'',iconSize:[sz,sz],iconAnchor:[x,y],
         html:`<div class="lm-ico${isA?'':' dim'}${detail&&detail.stopId===mk.id?' sel':''}" style="border-color:${t.color};width:${sz}px;height:${sz}px">${lmIcon(mk)}</div>`})})
-        .bindTooltip(mk.name,{direction:'top'}).on('click',()=>openDetail(t.id,mk.id)).addTo(markerLayer)});
+        .bindTooltip(mk.name,{direction:'top'}).on('click',()=>openDetail(t.id,mk.id)).addTo(lmLayer)});
     t.stops.forEach((s,i)=>{
       const m=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',iconSize:[24,24],
         html:`<div class="pin${detail&&detail.stopId===s.id?' sel':''}" style="background:${t.color};opacity:${isA?1:.6}">${i+1}</div>`}),zIndexOffset:isA?1000:0})
