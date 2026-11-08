@@ -103,6 +103,9 @@ span.via{cursor:default}
 .main,.detail{display:flex;flex-direction:column;gap:14px}
 .d-head{display:flex;align-items:center;gap:10px}
 .d-head .num{width:28px;height:28px;font-size:13px}
+.d-head .num.big{width:84px;height:84px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.d-head .num.big .lm-img{width:100%;height:100%}
+.d-head .num.big .lm-svg{width:66%;height:66%}
 .d-title{flex:1;min-width:0}
 .d-title b{display:block;font-size:18px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
 .d-title span{font-size:12px;color:var(--muted)}
@@ -1123,7 +1126,7 @@ async function photoURL(p){
 function renderDetail(){
   const d=detailStop();$('detail').hidden=!d;$('main').hidden=!!d;if(!d){detail=null;return}
   const{t,s,i}=d,ro=readOnly(),photos=s.photos||[];
-  if(d.mark)$('d-num').innerHTML=lmIcon(s);else $('d-num').textContent=i+1;$('d-num').style.background=d.mark?'#fff':t.color;$('d-num').style.border=d.mark?`2px solid ${t.color}`:'';
+  $('d-num').classList.toggle('big',!!d.mark);if(d.mark)$('d-num').innerHTML=lmIcon(s);else $('d-num').textContent=i+1;$('d-num').style.background=d.mark?'#fff':t.color;$('d-num').style.border=d.mark?`2px solid ${t.color}`:'';
   $('d-name').textContent=s.name;$('d-sub').textContent=[d.mark?'랜드마크 · '+lmType(s.type):'',s.country,t.name].filter(Boolean).join(' · ');
   $('d-count').textContent=photos.length?`사진 ${photos.length}장`:'사진';
   const g=$('d-grid');g.innerHTML='';
