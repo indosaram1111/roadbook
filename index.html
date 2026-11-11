@@ -554,7 +554,7 @@ function drawMap(){
     // 랜드마크: 이름 없이 픽토그램만, 가장 가까운 경유지 번호 오른쪽에 나란히
     const slot={},sz=isA?24:20,gap=3;
     (t.marks||[]).forEach(mk=>{let best=-1,bd=Infinity;
-      t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});
+      best=homeStop(t,mk);
       const at=best>=0?t.stops[best]:mk,n=best>=0?(slot[best]=(slot[best]||0)+1)-1:0;
       const col=n%3,row=Math.floor(n/3); // 한 줄에 3개, 넘으면 아래 줄로
       const x=best>=0?-(15+col*(sz+gap)):sz/2,y=best>=0?sz/2-row*(sz+gap):sz/2;
@@ -608,7 +608,7 @@ function render(){
     // 랜드마크는 가장 가까운 경유지 아래에 붙여서 보여줌 (번호 없음)
     const marksBy={},loose=[];
     (t.marks||[]).forEach((mk,k)=>{let best=-1,bd=Infinity;
-      t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});
+      best=homeStop(t,mk);
       if(best<0)loose.push(k);else(marksBy[best]=marksBy[best]||[]).push(k)});
     const markChip=k=>{const mk=t.marks[k],c=el('span','chip lm-chip');const b=el('button','lm-open');
       b.innerHTML=`<span class="lm-dot" style="border-color:${t.color}">${lmIcon(mk)}</span>`;b.append(mk.name);
@@ -1015,9 +1015,16 @@ LM_DATA.split('\n').forEach(line=>{const[country,rest]=line.split('>');
     LANDMARKS.push({lm:true,type,name,en,country,lat:+la,lng:+ln,key:name.replace(/[\s()]/g,''),alt:al?al.split(','):[],enKey:en.toLowerCase().replace(/[\s.'-]/g,'')})})});
 const TOP=new Set('서울 부산 제주 도쿄 오사카 교토 후쿠오카 삿포로 오키나와(나하) 베이징 상하이 홍콩 타이베이 방콕 치앙마이 다낭 하노이 호찌민 나트랑 세부 싱가포르 발리 괌 사이판 파리 런던 로마 바르셀로나 마드리드 프라하 빈 부다페스트 뮌헨 베를린 취리히 인터라켄 암스테르담 리스본 이스탄불 두바이 뉴욕 로스앤젤레스 샌프란시스코 라스베이거스 하와이 호놀룰루 밴쿠버 시드니 멜버른 오클랜드'.split(' '));
 /* 랜드마크마다 같은 나라에서 가장 가까운 도시(80km 이내)를 '소재 도시'로 연결 */
+/* 직선거리 대신 실제 관문 도시에 붙여야 하는 랜드마크 */
+const LM_CITY_FIX={'밀포드 사운드':'테아나우','다우트풀 사운드':'테아나우'};
+/* 여행 경로에서 랜드마크가 붙을 경유지: 지정된 관문 도시가 경로에 있으면 그곳, 없으면 가장 가까운 곳 */
+function homeStop(t,mk){const fix=LM_CITY_FIX[mk.name];
+  if(fix){const j=t.stops.findIndex(st=>st.name.replace(/\(.*\)/,'')===fix);if(j>=0)return j}
+  let best=-1,bd=Infinity;t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});return best}
 (function linkCities(){const R=Math.PI/180;
   LANDMARKS.forEach(l=>{let best=null,bd=80;
     CITIES.forEach(c=>{if(c.country!==l.country)return;const x=(c.lng-l.lng)*Math.cos((c.lat+l.lat)/2*R),y=c.lat-l.lat,d=Math.hypot(x,y)*111;if(d<bd){bd=d;best=c}});
+    const fx=LM_CITY_FIX[l.name]&&CITIES.find(c=>c.name===LM_CITY_FIX[l.name]&&c.country===l.country);if(fx)best=fx;
     l.city=best?best.name.replace(/\(.*\)/,''):'';l.cityKey=best?best.key:'';l.cityEn=best?best.enKey:''})})();
 function suggest(raw){
   const q=raw.replace(/[\s()]/g,''),ql=q.toLowerCase().replace(/[.'-]/g,'');if(!q)return[];
