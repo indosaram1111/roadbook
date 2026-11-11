@@ -868,7 +868,9 @@ const CITY_DATA=`대한민국>서울/Seoul/37.5665/126.978|부산/Busan/35.1796/
 수리남>파라마리보/Paramaribo/5.852/-55.2038
 뉴칼레도니아>누메아/Noumea/-22.2758/166.458
 프랑스령 폴리네시아>타히티(파페에테)/Papeete/-17.5516/-149.5585
-영국령 지브롤터>지브롤터/Gibraltar/36.1408/-5.3536`;
+영국령 지브롤터>지브롤터/Gibraltar/36.1408/-5.3536
+세이셸>빅토리아/Victoria/-4.6191/55.4513
+벨리즈>벨리즈시티/Belize City/17.5046/-88.1962`;
 
 const CHO='ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
 const JONG=['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
@@ -1022,7 +1024,7 @@ function homeStop(t,mk){const fix=LM_CITY_FIX[mk.name];
   if(fix){const j=t.stops.findIndex(st=>st.name.replace(/\(.*\)/,'')===fix);if(j>=0)return j}
   let best=-1,bd=Infinity;t.stops.forEach((st,j)=>{const d=haversine(st,mk);if(d<bd){bd=d;best=j}});return best}
 (function linkCities(){const R=Math.PI/180;
-  LANDMARKS.forEach(l=>{let best=null,bd=80;
+  LANDMARKS.forEach(l=>{let best=null,bd=Infinity;
     CITIES.forEach(c=>{if(c.country!==l.country)return;const x=(c.lng-l.lng)*Math.cos((c.lat+l.lat)/2*R),y=c.lat-l.lat,d=Math.hypot(x,y)*111;if(d<bd){bd=d;best=c}});
     const fx=LM_CITY_FIX[l.name]&&CITIES.find(c=>c.name===LM_CITY_FIX[l.name]&&c.country===l.country);if(fx)best=fx;
     l.city=best?best.name.replace(/\(.*\)/,''):'';l.cityKey=best?best.key:'';l.cityEn=best?best.enKey:''})})();
@@ -1056,7 +1058,7 @@ function drawResults(list,remote,raw){
   const ul=$('results');ul.innerHTML='';sugg=list;activeIdx=list.length?0:-1;
   list.forEach((p,i)=>{const li=el('li'),b=el('button');if(i===activeIdx)b.className='act';
     b.innerHTML='<span></span><small></small>';b.firstChild.textContent=p.name;
-    if(p.lm){b.firstChild.innerHTML=`<span class="lm-dot sm">${lmIcon(p)}</span>`;b.firstChild.append(' '+p.name);b.lastChild.textContent=`랜드마크 · ${lmType(p.type)} · ${p.city?p.city+', ':''}${p.country}`}
+    if(p.lm){b.firstChild.innerHTML=`<span class="lm-dot sm">${lmIcon(p)}</span>`;b.firstChild.append(' '+p.name);b.lastChild.textContent=`랜드마크 · ${lmType(p.type)} · ${p.country}${p.city?' '+p.city:''}`}
     else b.lastChild.textContent=p.full||`${p.country} · ${p.en}`;
     b.addEventListener('pointerdown',e=>e.preventDefault());b.onclick=()=>pick(p);li.append(b);ul.append(li)});
   if(!remote&&!list.length){ul.innerHTML='<li class="empty" style="padding:8px 12px">목록에 없는 도시예요. 위의 ‘지도에서 더 찾기’를 눌러 보세요.</li>'}
@@ -1134,7 +1136,7 @@ function renderDetail(){
   const d=detailStop();$('detail').hidden=!d;$('main').hidden=!!d;if(!d){detail=null;return}
   const{t,s,i}=d,ro=readOnly(),photos=s.photos||[];
   $('d-num').classList.toggle('big',!!d.mark);if(d.mark)$('d-num').innerHTML=lmIcon(s);else $('d-num').textContent=i+1;$('d-num').style.background=d.mark?'#fff':t.color;$('d-num').style.border=d.mark?`2px solid ${t.color}`:'';
-  $('d-name').textContent=s.name;$('d-sub').textContent=[d.mark?'랜드마크 · '+lmType(s.type):'',s.country,t.name].filter(Boolean).join(' · ');
+  $('d-name').textContent=s.name;const lmc=d.mark?(LANDMARKS.find(l=>l.name===s.name)||{}).city:'';$('d-sub').textContent=[d.mark?'랜드마크 · '+lmType(s.type):'',(s.country||'')+(lmc?' '+lmc:''),t.name].filter(Boolean).join(' · ');
   $('d-count').textContent=photos.length?`사진 ${photos.length}장`:'사진';
   const g=$('d-grid');g.innerHTML='';
   photos.forEach((p,k)=>{const w=el('div','tile-wrap'),b=el('button','tile');b.setAttribute('aria-label',`${s.name} 사진 ${k+1} 크게 보기`);w.append(b);g.append(w);
@@ -1256,7 +1258,7 @@ function renderCollection(){
   const sg=$('col-sights');sg.innerHTML='';
   list.forEach((l,k)=>{const on=marks.has(l.name),b=el('button','col-it'+(on?'':' off'));b.innerHTML=lmIcon(l);
     b.setAttribute('aria-label',`${k+1}위 ${l.name}`+(on?' (다녀옴)':''));
-    b.onclick=()=>{colTip(`${k+1}위 ${l.name} · ${l.city?l.city+', ':''}${l.country}`+(on?' · 다녀왔어요':''));};sg.append(b)});
+    b.onclick=()=>{colTip(`${k+1}위 ${l.name} · ${l.country}${l.city?' '+l.city:''}`+(on?' · 다녀왔어요':''));};sg.append(b)});
   $('col-lmore').textContent=colTop===100?'101~200위까지 보기':'TOP 100만 보기';
   const xl=EXTRA_SIGHTS.map(n=>LANDMARKS.find(l=>l.name===n)).filter(Boolean),xg=$('col-extra');xg.innerHTML='';
   const xdone=xl.filter(l=>marks.has(l.name)).length;$('col-xcount').textContent=`${xdone} / ${xl.length}`;
@@ -1265,7 +1267,7 @@ function renderCollection(){
     t.textContent=cname;c.textContent=`${ls.filter(l=>marks.has(l.name)).length} / ${ls.length}`;h.append(t,c);sec.append(h,g);xg.append(sec);
     ls.forEach(l=>{const on=marks.has(l.name),b=el('button','col-it'+(on?'':' off'));b.innerHTML=lmIcon(l);
       b.setAttribute('aria-label',l.name+(on?' (다녀옴)':''));
-      b.onclick=()=>colTip(`${l.name} · ${l.city?l.city+', ':''}${l.country}`+(on?' · 다녀왔어요':''));g.append(b)})});
+      b.onclick=()=>colTip(`${l.name} · ${l.country}${l.city?' '+l.city:''}`+(on?' · 다녀왔어요':''));g.append(b)})});
   $('col-sub').textContent=`국기 ${got.length}개 · 랜드마크 ${done+xdone}곳`;
 }
 $('col-open').onclick=()=>{$('col').hidden=false;renderCollection();$('col-close').focus()};
