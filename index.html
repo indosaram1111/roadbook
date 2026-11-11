@@ -350,7 +350,26 @@ const uid=()=>Math.random().toString(36).slice(2,9);
 /* ---------- 저장 ---------- */
 const KEY='roadbook-v1', LEGKEY='roadbook-legs-v1';
 function load(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
-function saveLegs(){try{localStorage.setItem(LEGKEY,JSON.stringify(legCache))}catch(e){}}
+function saveLegs(){} // 경로는 이제 legPut으로 하나씩 IndexedDB에 저장
+/* ---------- 경로 캐시: 브라우저 IndexedDB(용량 넉넉) ---------- */
+function simplifyPts(p,tol){ // 더글라스-포이커: 모양은 그대로, 점 개수만 줄임
+  if(p.length<3)return p;const keep=new Uint8Array(p.length);keep[0]=keep[p.length-1]=1;const st=[[0,p.length-1]];
+  while(st.length){const[a,b]=st.pop();let mx=0,mi=-1;const[ay,ax]=p[a],[by,bx]=p[b],dy=by-ay,dx=bx-ax,L=Math.hypot(dx,dy)||1e-12;
+    for(let i=a+1;i<b;i++){const d=Math.abs(dy*(p[i][1]-ax)-dx*(p[i][0]-ay))/L;if(d>mx){mx=d;mi=i}}
+    if(mx>tol){keep[mi]=1;st.push([a,mi],[mi,b])}}
+  return p.filter((_,i)=>keep[i])}
+let legDbP=null;
+function legDb(){if(!legDbP)legDbP=new Promise((ok,no)=>{const r=indexedDB.open('roadbook-legs',1);
+  r.onupgradeneeded=()=>r.result.createObjectStore('l');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});return legDbP}
+async function legPut(k,v){try{const db=await legDb();db.transaction('l','readwrite').objectStore('l').put(v,k)}catch(e){}}
+async function legLoadAll(){try{const db=await legDb();return await new Promise(ok=>{const out={},rq=db.transaction('l').objectStore('l').openCursor();
+  rq.onsuccess=()=>{const c=rq.result;if(c){out[c.key]=c.value;c.continue()}else ok(out)};rq.onerror=()=>ok(out)})}catch(e){return{}}}
+let legReady=false;
+function mergeLegs(obj,persist){let n=0;for(const k in obj){if(!legCache[k]&&obj[k]){legCache[k]=obj[k];n++;if(persist)legPut(k,obj[k])}}return n}
+/* 공유용: 지도 데이터와 함께 저장할 자동차 경로 (더 가볍게) */
+function pickLegs(st){const out={};(st.trips||[]).forEach(t=>t.stops.forEach((b,i)=>{if(!i||viaOf(b)!=='car')return;
+  const k=legKey(t.stops[i-1],b),l=legCache[k];if(!l)return;
+  out[k]=l.type==='road'?{type:'road',km:l.km,min:l.min,pts:simplifyPts(l.pts,0.0008).map(([y,x])=>[+y.toFixed(4),+x.toFixed(4)])}:l}));return out}
 function save(){
   saveLegs();
   if(readOnly())return;
@@ -380,7 +399,11 @@ let showState=clone(EMPTY), showLoaded=false;
 let tab='show';
 let state=showState;
 const readOnly=()=>tab==='show';
-let legCache=load(LEGKEY)||{};
+let legCache={};
+(async()=>{const old=load(LEGKEY);           // 예전 localStorage 캐시는 IndexedDB로 옮기고 정리
+  const got=await legLoadAll();mergeLegs(got,false);
+  if(old){mergeLegs(old,true);try{localStorage.removeItem(LEGKEY)}catch(e){}}
+  legReady=true;render();pump()})();
 let mode='route';
 const active=()=>state.trips.find(t=>t.id===state.activeId)||state.trips[0];
 
@@ -511,6 +534,7 @@ function bend(a,b,k){ // 두 도시 사이를 옆으로 휘어진 곡선으로
   return out}
 const queue=[];let busy=false,routeOffline=false;const legFail={};
 function needLeg(a,b){const k=legKey(a,b);
+  if(!legReady)return;
   if(legCache[k]||legFail[k]||routeOffline||queue.some(q=>q.k===k))return;queue.push({k,a,b});pump()}
 async function askRouter(base,a,b){
   const long=haversine(a,b)>500;
@@ -519,7 +543,7 @@ async function askRouter(base,a,b){
     return await r.json()}finally{clearTimeout(tm)}}
 function retryRoutes(){routeOffline=false;for(const k in legFail)delete legFail[k];render()}
 async function pump(){
-  if(busy||!queue.length)return;busy=true;const{k,a,b}=queue.shift();
+  if(!legReady||busy||!queue.length)return;busy=true;const{k,a,b}=queue.shift();
   let j=null,netErr=0;
   for(const base of ROUTERS){
     try{j=await askRouter(base,a,b);if(j&&(j.code==='Ok'||j.code==='NoRoute'||j.code==='NoSegment'))break}
@@ -528,10 +552,10 @@ async function pump(){
     if(!j){if(netErr===ROUTERS.length){routeOffline=true;queue.length=0;render()}else{legFail[k]=true;render()}return}
     if(j.code==='Ok'&&j.routes&&j.routes[0]){const rt=j.routes[0];
       legCache[k]={type:'road',km:rt.distance/1000,min:rt.duration/60,
-        pts:rt.geometry.coordinates.map(([x,y])=>[+y.toFixed(5),+x.toFixed(5)])};
+        pts:simplifyPts(rt.geometry.coordinates.map(([x,y])=>[+y.toFixed(5),+x.toFixed(5)]),0.0002)};
     }else if(j.code==='NoRoute'||j.code==='NoSegment'){legCache[k]={type:'line',km:haversine(a,b)}}
     else{legFail[k]=true;render();return}
-    saveLegs();render();
+    legPut(k,legCache[k]);render();if(session&&tab==='mine')scheduleCloud();
   }finally{busy=false;setTimeout(pump,400)}
 }
 
@@ -1291,17 +1315,25 @@ function cleanSbUrl(u){u=(u||'').trim();
   const m=u.match(/^(?:https?:\/\/)?([a-z0-9]+)\.supabase\.co/i);if(m)return`https://${m[1]}.supabase.co`;
   return u.replace(/\/+$/,'')}
 if(SUPABASE_URL&&SUPABASE_KEY&&window.supabase)sb=window.supabase.createClient(cleanSbUrl(SUPABASE_URL),SUPABASE_KEY.trim());
+const SHOWKEY=()=>'roadbook-show-'+OWNER_ID;
+function takeMap(d){if(d&&d.legs){mergeLegs(d.legs,true);d={...d};delete d.legs}return d}
 async function loadShow(){
   if(!sb||!OWNER_ID){showState=clone(SAMPLE);showLoaded=true}
-  else{const{data,error}=await sb.from('maps').select('data').eq('user_id',OWNER_ID).maybeSingle();
-    showLoaded=true;if(error){toast('여행 기록을 불러오지 못했어요.');return}
-    showState=data&&data.data&&data.data.trips?data.data:clone(EMPTY)}
+  else{const cached=load(SHOWKEY());
+    if(cached&&cached.trips&&!showLoaded){showState=takeMap(cached);showLoaded=true;
+      if(!showState.trips.find(t=>t.id===showState.activeId))showState.activeId=showState.trips[0]&&showState.trips[0].id;
+      if(tab==='show'){state=showState;render();fitTrip()}}
+    const{data,error}=await sb.from('maps').select('data').eq('user_id',OWNER_ID).maybeSingle();
+    showLoaded=true;if(error){if(!cached)toast('여행 기록을 불러오지 못했어요.');return}
+    const fresh=data&&data.data&&data.data.trips?data.data:clone(EMPTY);
+    try{localStorage.setItem(SHOWKEY(),JSON.stringify(fresh))}catch(e){}
+    const keep=showState.activeId;showState=takeMap(fresh);if(showState.trips.find(t=>t.id===keep))showState.activeId=keep}
   if(!showState.trips.find(t=>t.id===showState.activeId))showState.activeId=showState.trips[0]&&showState.trips[0].id;
   if(tab==='show'){state=showState;render();fitTrip()}
 }
 const pendKey=()=>'roadbook-pending-'+(session?session.user.id:'');
 async function pushCloud(){if(!session)return;clearTimeout(saveTimer);saveTimer=null;
-  const{error}=await sb.from('maps').upsert({user_id:session.user.id,data:myState,is_public:session.user.id===OWNER_ID,updated_at:new Date().toISOString()});
+  const{error}=await sb.from('maps').upsert({user_id:session.user.id,data:{...myState,legs:pickLegs(myState)},is_public:session.user.id===OWNER_ID,updated_at:new Date().toISOString()});
   if(!error)try{localStorage.removeItem(pendKey())}catch(e){}
   if(error)console.warn('저장 실패',error);
   syncText=!error?'저장됨':/relation .*does not exist|Could not find the table|schema cache/i.test(error.message||'')?'저장 실패 · 서버에 maps 표가 없어요. supabase_setup.sql을 실행해 주세요.'
@@ -1320,11 +1352,14 @@ async function onSession(s){
   if(!s){if(prev){myState=load(KEY)||clone(SAMPLE);if(tab==='mine'){state=myState;render()}}renderAccount();return}
   if(prev===s.user.id){renderAccount();return}
   syncText='불러오는 중…';renderAccount();
+  const mineKey='roadbook-mine-'+s.user.id,mc=load(mineKey);
+  if(mc&&mc.trips){myState=takeMap(mc);if(tab==='mine'){state=myState;render();fitTrip()}}
   const{data,error}=await sb.from('maps').select('data').eq('user_id',s.user.id).maybeSingle();
+  if(!error&&data&&data.data)try{localStorage.setItem(mineKey,JSON.stringify(data.data))}catch(e){}
   if(error){syncText='불러오기 실패';renderAccount();return}
   const pend=load(pendKey()); // 지난번에 서버로 못 보낸 기록이 이 기기에 남아 있으면 그걸 이어서 올림
   if(pend&&pend.trips){myState=pend;await pushCloud()}
-  else if(data&&data.data&&data.data.trips){myState=data.data;syncText='저장됨'}
+  else if(data&&data.data&&data.data.trips){myState=takeMap(data.data);syncText='저장됨'}
   else{await pushCloud()} // 처음 로그인: 이 기기의 기록을 올림
   if(tab==='mine'){state=myState;render();fitTrip()}else renderAccount();
 }
