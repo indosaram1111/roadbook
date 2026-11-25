@@ -1163,7 +1163,7 @@ const urlCache={};
 /* 나만 보기 사진: 비공개 저장 공간(photos-private)에 두고, 볼 때만 1시간짜리 임시 주소를 받음 */
 const PUB='photos',PRIV='photos-private';
 const bucketOf=p=>p.priv?PRIV:PUB;
-const canSeePriv=()=>!readOnly()||!!(session&&session.user.id===OWNER_ID);
+const canSeePriv=()=>!readOnly(); // '여행 기록' 탭은 방문자가 보는 화면 그대로: 나만 보기 사진은 숨김
 const visPhotos=st=>{const ps=st.photos||[];return canSeePriv()?ps:ps.filter(p=>!p.priv)};
 async function photoURL(p){
   if(p.path&&p.priv){if(!sb||!session)return null;const c=urlCache['s:'+p.path];if(c&&c.exp>Date.now())return c.u;
