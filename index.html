@@ -114,9 +114,15 @@ span.via{cursor:default}
 .tile img{width:100%;height:100%;object-fit:cover;display:block}
 .tile-wrap{position:relative;aspect-ratio:1;min-width:0}
 .tile-wrap .tile{width:100%;height:100%}
-.tile-x{position:absolute;top:5px;right:5px;min-width:24px;height:24px;padding:0 6px;border:0;border-radius:999px;
+.tile-x{position:absolute;top:5px;left:5px;min-width:24px;height:24px;padding:0 6px;border:0;border-radius:999px;
   background:rgba(15,20,25,.62);color:#fff;font:500 15px/24px var(--font-body);cursor:pointer;opacity:.85}
 .tile-x:hover,.tile-x:focus-visible{opacity:1;background:rgba(15,20,25,.82)}
+.tile-lock{position:absolute;top:5px;right:5px;width:24px;height:24px;border:0;border-radius:999px;display:grid;place-items:center;
+  background:rgba(15,20,25,.45);color:#fff;cursor:pointer;opacity:.7;padding:0}
+.tile-lock:hover,.tile-lock:focus-visible{opacity:1;background:rgba(15,20,25,.75)}
+.tile-lock.on{background:#c2410c;opacity:1}
+.tile-lock.busy{opacity:.4;pointer-events:none}
+.tile-wrap.is-priv .tile{outline:2px solid #c2410c;outline-offset:-2px}
 .tile-x.armed{background:#c0392b;font-size:12px;opacity:1}
 .tile.add{border:1.5px dashed var(--line);color:var(--accent);font:300 34px/1 var(--font-body);display:grid;place-items:center;background:transparent}
 .tile.add small{display:block;font:500 11px var(--font-body);margin-top:4px}
@@ -1152,16 +1158,24 @@ function openDetail(tripId,stopId){detail={tripId,stopId};state.activeId=tripId;
 $('d-back').onclick=()=>{detail=null;render()};
 let uploading=null; // {done,total}
 const urlCache={};
+/* 나만 보기 사진: 비공개 저장 공간(photos-private)에 두고, 볼 때만 1시간짜리 임시 주소를 받음 */
+const PUB='photos',PRIV='photos-private';
+const bucketOf=p=>p.priv?PRIV:PUB;
+const canSeePriv=()=>!readOnly()||!!(session&&session.user.id===OWNER_ID);
+const visPhotos=st=>{const ps=st.photos||[];return canSeePriv()?ps:ps.filter(p=>!p.priv)};
 async function photoURL(p){
-  if(p.path)return sb?sb.storage.from('photos').getPublicUrl(p.path).data.publicUrl:null;
+  if(p.path&&p.priv){if(!sb||!session)return null;const c=urlCache['s:'+p.path];if(c&&c.exp>Date.now())return c.u;
+    const{data,error}=await sb.storage.from(PRIV).createSignedUrl(p.path,3600);if(error||!data)return null;
+    urlCache['s:'+p.path]={u:data.signedUrl,exp:Date.now()+3300e3};return data.signedUrl}
+  if(p.path)return sb?sb.storage.from(PUB).getPublicUrl(p.path).data.publicUrl:null;
   if(urlCache[p.id])return urlCache[p.id];
   const blob=await idbGet(p.id);if(!blob)return null;return urlCache[p.id]=URL.createObjectURL(blob)}
 function renderDetail(){
   const d=detailStop();$('detail').hidden=!d;$('main').hidden=!!d;if(!d){detail=null;return}
-  const{t,s,i}=d,ro=readOnly(),photos=s.photos||[];
+  const{t,s,i}=d,ro=readOnly(),photos=visPhotos(s);
   $('d-num').classList.toggle('big',!!d.mark);if(d.mark)$('d-num').innerHTML=lmIcon(s);else $('d-num').textContent=i+1;$('d-num').style.background=d.mark?'#fff':t.color;$('d-num').style.border=d.mark?`2px solid ${t.color}`:'';
   $('d-name').textContent=s.name;const lmc=d.mark?(LANDMARKS.find(l=>l.name===s.name)||{}).city:'';$('d-sub').textContent=[d.mark?'랜드마크 · '+lmType(s.type):'',(s.country||'')+(lmc?' '+lmc:''),t.name].filter(Boolean).join(' · ');
-  $('d-count').textContent=photos.length?`사진 ${photos.length}장`:'사진';
+  const np=photos.filter(p=>p.priv).length;$('d-count').textContent=photos.length?`사진 ${photos.length}장`+(np&&!ro?` · 나만 보기 ${np}장`:''):'사진';
   const g=$('d-grid');g.innerHTML='';
   photos.forEach((p,k)=>{const w=el('div','tile-wrap'),b=el('button','tile');b.setAttribute('aria-label',`${s.name} 사진 ${k+1} 크게 보기`);w.append(b);g.append(w);
     photoURL(p).then(u=>{if(u){const im=el('img');im.loading='lazy';im.alt='';im.src=u;b.append(im)}
@@ -1171,7 +1185,13 @@ function renderDetail(){
       x.setAttribute('aria-label',delArmId===p.id?'한 번 더 누르면 삭제':`사진 ${k+1} 삭제`);
       x.onclick=ev=>{ev.stopPropagation();
         if(delArmId!==p.id){delArmId=p.id;clearTimeout(delArmT);delArmT=setTimeout(()=>{delArmId=null;renderDetail()},3000);renderDetail();return}
-        delArmId=null;deletePhoto(s,p.id)};w.append(x)}});
+        delArmId=null;deletePhoto(s,p.id)};w.append(x);
+      if(p.path){const lk=el('button','tile-lock'+(p.priv?' on':'')+(lockBusy===p.id?' busy':''));
+        lk.innerHTML=p.priv?LOCK_ON:LOCK_OFF;lk.title=p.priv?'나만 보기 (누르면 모두에게 공개)':'모두 공개 (누르면 나만 보기)';
+        lk.setAttribute('aria-label',p.priv?`사진 ${k+1}: 나만 보기, 눌러서 공개로 바꾸기`:`사진 ${k+1}: 공개, 눌러서 나만 보기로 바꾸기`);
+        lk.onclick=ev=>{ev.stopPropagation();togglePriv(s,p)};w.append(lk)}
+      }
+    if(p.priv){w.classList.add('is-priv')}});
   if(uploading){const b=el('div','tile busy');b.textContent=`올리는 중 ${uploading.done}/${uploading.total}`;g.append(b)}
   if(!ro){const a=el('button','tile add');a.innerHTML='+<small>사진 추가</small>';a.onclick=()=>$('d-file').click();g.append(a);
     const h=el('div','drop-hint');h.textContent='PC에서는 사진 파일을 이 칸으로 끌어다 놓아도 돼요.';g.append(h)}
@@ -1215,7 +1235,7 @@ addEventListener('drop',e=>{if(hasFiles(e)){e.preventDefault();if(detail&&!readO
 /* 크게 보기 */
 let lbIdx=0,lbDelArm=false;
 function openLB(k){lbIdx=k;lbDelArm=false;$('lb').hidden=false;showLB()}
-async function showLB(){const d=detailStop();const ps=d&&d.s.photos||[];if(!ps.length){$('lb').hidden=true;return}
+async function showLB(){const d=detailStop();const ps=d?visPhotos(d.s):[];if(!ps.length){$('lb').hidden=true;return}
   lbIdx=(lbIdx+ps.length)%ps.length;$('lb-img').src=await photoURL(ps[lbIdx])||'';
   $('lb-pos').textContent=`${lbIdx+1} / ${ps.length}`;$('lb-del').hidden=readOnly();
   $('lb-del').textContent=lbDelArm?'정말 삭제할까요?':'사진 삭제';
@@ -1227,11 +1247,24 @@ $('lb-next').onclick=()=>{lbIdx++;lbDelArm=false;showLB()};
 document.addEventListener('keydown',e=>{if($('lb').hidden)return;
   if(e.key==='Escape')$('lb').hidden=true;if(e.key==='ArrowLeft')$('lb-prev').click();if(e.key==='ArrowRight')$('lb-next').click()});
 let delArmId=null,delArmT=null;
+const LOCK_ON='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const LOCK_OFF='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>';
+let lockBusy=null;
+async function togglePriv(stop,p){
+  if(!sb||!session){toast('로그인한 상태에서만 바꿀 수 있어요.');return}
+  if(lockBusy)return;lockBusy=p.id;renderDetail();
+  const from=bucketOf(p),to=p.priv?PUB:PRIV;
+  try{const dl=await sb.storage.from(from).download(p.path);if(dl.error)throw dl.error;
+    const up=await sb.storage.from(to).upload(p.path,dl.data,{contentType:'image/jpeg',upsert:true});if(up.error)throw up.error;
+    await sb.storage.from(from).remove([p.path]);
+    p.priv=!p.priv;delete urlCache['s:'+p.path];save();toast(p.priv?'나만 볼 수 있는 사진으로 바꿨어요.':'모두에게 공개했어요.')}
+  catch(e){console.warn(e);toast(/not found|bucket/i.test(e.message||'')?'비공개 저장 공간이 아직 없어요. supabase_private_photos.sql을 실행해 주세요.':'바꾸지 못했어요. 잠시 뒤 다시 시도해 주세요.')}
+  finally{lockBusy=null;render()}}
 async function deletePhoto(stop,id){const k=(stop.photos||[]).findIndex(x=>x.id===id);if(k<0)return;
   const[p]=stop.photos.splice(k,1);save();render();toast('사진을 삭제했어요.');
-  try{if(p.path&&sb)await sb.storage.from('photos').remove([p.path]);if(p.local)await idbDel(p.id)}catch(err){}}
+  try{if(p.path&&sb)await sb.storage.from(bucketOf(p)).remove([p.path]);if(p.local)await idbDel(p.id)}catch(err){}}
 $('lb-del').onclick=async()=>{if(!lbDelArm){lbDelArm=true;showLB();return}
-  const d=detailStop();const p=d.s.photos[lbIdx];lbDelArm=false;await deletePhoto(d.s,p.id);showLB()};
+  const d=detailStop();const p=visPhotos(d.s)[lbIdx];lbDelArm=false;await deletePhoto(d.s,p.id);showLB()};
 
 /* 이 기기 저장소 (로그인 전 사진) */
 function idb(){return new Promise((ok,no)=>{const r=indexedDB.open('roadbook-photos',1);
