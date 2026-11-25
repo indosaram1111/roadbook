@@ -136,7 +136,9 @@ span.via{cursor:default}
 .tile.missing{display:grid;place-items:center;font-size:11px;color:var(--muted);padding:6px;text-align:center}
 .lightbox{position:fixed;inset:0;z-index:3000;background:rgba(8,12,15,.94);display:grid;place-items:center;
   padding:calc(48px + env(safe-area-inset-top,0px)) 12px calc(64px + env(safe-area-inset-bottom,0px))}
-.lightbox img{max-width:100%;max-height:100%;object-fit:contain}
+.lightbox{touch-action:pan-y pinch-zoom}
+.lightbox img{max-width:100%;max-height:100%;object-fit:contain;transition:transform .2s,opacity .2s;user-select:none;-webkit-user-drag:none}
+.lightbox img.dragging{transition:none}
 .lb-btn{position:absolute;border:0;background:rgba(255,255,255,.12);color:#fff;border-radius:999px;width:44px;height:44px;font-size:26px;cursor:pointer}
 .lb-close{top:calc(10px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px))}
 .lb-prev{left:calc(10px + env(safe-area-inset-left,0px));top:50%}
@@ -1241,7 +1243,21 @@ async function showLB(){const d=detailStop();const ps=d?visPhotos(d.s):[];if(!ps
   $('lb-del').textContent=lbDelArm?'정말 삭제할까요?':'사진 삭제';
   $('lb-prev').hidden=$('lb-next').hidden=ps.length<2}
 $('lb-close').onclick=()=>{$('lb').hidden=true};
-$('lb').onclick=e=>{if(e.target===$('lb'))$('lb').hidden=true};
+$('lb').onclick=e=>{if(swiped){swiped=false;return}if(e.target===$('lb'))$('lb').hidden=true};
+/* 사진 넘기기: 손가락이나 마우스로 좌우로 밀기 */
+let swX=null,swY=null,swDx=0,swiped=false;
+$('lb').addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;swX=e.clientX;swY=e.clientY;swDx=0;$('lb-img').classList.add('dragging')});
+$('lb').addEventListener('pointermove',e=>{if(swX===null)return;const dx=e.clientX-swX,dy=e.clientY-swY;
+  if(Math.abs(dx)<Math.abs(dy)&&Math.abs(swDx)<10)return;swDx=dx;
+  $('lb-img').style.transform=`translateX(${dx}px)`;$('lb-img').style.opacity=String(Math.max(.35,1-Math.abs(dx)/600))});
+function swEnd(){if(swX===null)return;const img=$('lb-img'),dx=swDx;swX=null;img.classList.remove('dragging');
+  const n=visPhotos((detailStop()||{s:{}}).s).length,TH=50;
+  if(Math.abs(dx)>TH&&n>1){swiped=true;const dir=dx<0?1:-1;
+    img.style.transform=`translateX(${dx<0?-120:120}px)`;img.style.opacity='0';
+    setTimeout(async()=>{lbIdx+=dir;lbDelArm=false;await showLB();img.classList.add('dragging');img.style.transform=`translateX(${dx<0?80:-80}px)`;
+      requestAnimationFrame(()=>{img.classList.remove('dragging');img.style.transform='';img.style.opacity=''})},160)}
+  else{if(Math.abs(dx)>8)swiped=true;img.style.transform='';img.style.opacity=''}}
+$('lb').addEventListener('pointerup',swEnd);$('lb').addEventListener('pointercancel',swEnd);
 $('lb-prev').onclick=()=>{lbIdx--;lbDelArm=false;showLB()};
 $('lb-next').onclick=()=>{lbIdx++;lbDelArm=false;showLB()};
 document.addEventListener('keydown',e=>{if($('lb').hidden)return;
